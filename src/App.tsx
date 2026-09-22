@@ -33,7 +33,7 @@ type OnboardingResponse = {
   status?: string;
 };
 
-const apiOrigin = (import.meta.env.VITE_API_URL ?? "https://piki-api.onrender.com").replace(/\/$/, "");
+const apiOrigin = (import.meta.env.VITE_API_URL ?? "https://piki-api-e0yg.onrender.com").replace(/\/$/, "");
 
 const navigation: Array<{ label: View; icon: typeof LayoutDashboard }> = [
   { label: "Resumen", icon: LayoutDashboard },
@@ -117,7 +117,7 @@ function App() {
     <div className="app-shell">
       <aside className={`sidebar ${menuOpen ? "sidebar-open" : ""}`} aria-label="Navegación principal">
         <div className="brand-block">
-          <div className="brand-mark">Y</div>
+          <div className="brand-mark">P</div>
           <div>
             <strong>piki</strong>
             <span>Partners</span>
@@ -168,7 +168,7 @@ function App() {
             <button className="icon-button" type="button" aria-label="Notificaciones" onClick={() => setActiveView("Pedidos")}>
               <Bell size={19} />
             </button>
-            <div className="user-avatar" aria-label="Usuario de PIKI">Y</div>
+            <div className="user-avatar" aria-label="Usuario de PIKI">P</div>
           </div>
         </header>
 
