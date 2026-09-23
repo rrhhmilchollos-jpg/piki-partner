@@ -80,6 +80,8 @@ function App() {
     setMenuOpen(false);
   }
 
+  if (!apiToken || authRequired) return <main className="page-content"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); }} /></main>;
+
   return (
     <div className={`app-shell ${pdaMode ? "pda-mode" : ""}`}>
       <aside className={`sidebar ${menuOpen ? "sidebar-open" : ""}`} aria-label="Navegación principal">
