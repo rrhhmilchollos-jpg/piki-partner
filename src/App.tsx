@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import type { FormEvent } from "react";
 import {
   Activity,
   Bell,
@@ -17,21 +16,10 @@ import {
   X,
 } from "lucide-react";
 import "./App.css";
+import PartnerOnboarding from "./PartnerOnboarding";
 
 type ApiStatus = "checking" | "ready" | "unavailable";
 type View = "Resumen" | "Alta de comercio" | "Pedidos" | "Catálogo" | "Equipo" | "Ajustes";
-
-type OnboardingResponse = {
-  message: string;
-  partner: {
-    id?: string;
-    name: string;
-    email: string;
-    phone: string;
-    onboarding_status?: string;
-  };
-  status?: string;
-};
 
 const apiOrigin = (import.meta.env.VITE_API_URL ?? "https://api.pikidelivery.com").replace(/\/$/, "");
 
@@ -49,10 +37,6 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [apiStatus, setApiStatus] = useState<ApiStatus>("checking");
   const [apiMessage, setApiMessage] = useState("Comprobando la disponibilidad de la plataforma.");
-  const [formState, setFormState] = useState({ name: "", email: "", phone: "" });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submission, setSubmission] = useState<OnboardingResponse | null>(null);
-  const [formError, setFormError] = useState("");
 
   const checkApi = useCallback(async () => {
     try {
@@ -81,32 +65,6 @@ function App() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [checkApi]);
-
-  async function submitOnboarding(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsSubmitting(true);
-    setFormError("");
-    setSubmission(null);
-
-    try {
-      const response = await fetch(`${apiOrigin}/api/v1/partners/onboarding`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formState),
-      });
-      const payload = (await response.json()) as OnboardingResponse & { error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error ?? "No se ha podido registrar el comercio.");
-      }
-      setSubmission(payload);
-      setFormState({ name: "", email: "", phone: "" });
-      await checkApi();
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : "No se ha podido registrar el comercio.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
 
   function selectView(view: View) {
     setActiveView(view);
@@ -216,54 +174,7 @@ function App() {
             </>
           )}
 
-          {activeView === "Alta de comercio" && (
-            <section className="onboarding-layout">
-              <div className="page-heading compact">
-                <div>
-                  <p className="eyebrow">ONBOARDING</p>
-                  <h1>Alta de comercio</h1>
-                  <p className="lead">Envía una solicitud real a la API central de PIKI.</p>
-                </div>
-              </div>
-              <div className="onboarding-grid">
-                <div className="process-card">
-                  <span className="step-number">01</span>
-                  <h2>Datos de contacto</h2>
-                  <p>Recopilamos la información mínima para iniciar la revisión comercial.</p>
-                  <div className="process-line" />
-                  <span className="step-number muted-step">02</span>
-                  <h2 className="muted-text">Revisión y activación</h2>
-                  <p className="muted-text">La configuración de catálogo y zonas se habilita tras la aprobación.</p>
-                </div>
-                <form className="partner-form" onSubmit={submitOnboarding}>
-                  <label>
-                    Nombre comercial
-                    <input required minLength={2} value={formState.name} onChange={(event) => setFormState({ ...formState, name: event.target.value })} placeholder="Ej. La Cocina de Xàtiva" />
-                  </label>
-                  <label>
-                    Correo electrónico
-                    <input required type="email" value={formState.email} onChange={(event) => setFormState({ ...formState, email: event.target.value })} placeholder="contacto@comercio.es" />
-                  </label>
-                  <label>
-                    Teléfono de contacto
-                    <input required minLength={6} value={formState.phone} onChange={(event) => setFormState({ ...formState, phone: event.target.value })} placeholder="600 000 000" />
-                  </label>
-                  {formError && <p className="form-error" role="alert">{formError}</p>}
-                  {submission && (
-                    <div className="form-success" role="status">
-                      <CheckCircle2 size={19} />
-                      <span>{submission.message} Estado: {submission.partner.onboarding_status ?? submission.status ?? "pending_review"}.</span>
-                    </div>
-                  )}
-                  <button className="primary-button form-submit" type="submit" disabled={isSubmitting || apiStatus !== "ready"}>
-                    {isSubmitting ? "Enviando solicitud…" : "Enviar a revisión"}
-                    {!isSubmitting && <ChevronRight size={17} />}
-                  </button>
-                  {apiStatus !== "ready" && <p className="form-hint">El envío se habilita cuando la API de producción esté disponible.</p>}
-                </form>
-              </div>
-            </section>
-          )}
+          {activeView === "Alta de comercio" && <PartnerOnboarding apiOrigin={apiOrigin} onComplete={refreshApiStatus} />}
 
           {activeView !== "Resumen" && activeView !== "Alta de comercio" && (
             <section className="feature-empty">
