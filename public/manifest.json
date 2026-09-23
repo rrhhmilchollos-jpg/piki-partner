@@ -1,10 +1,10 @@
 {
-  "id": "https://partners.pikidelivery.com/",
+  "id": "/",
   "name": "PIKI Partners · PDA Cocina",
   "short_name": "PIKI Cocina",
   "description": "PDA de cocina PIKI para aceptar pedidos, preparar comandas y marcar recogidas.",
-  "start_url": "https://partners.pikidelivery.com/?mode=pda",
-  "scope": "https://partners.pikidelivery.com/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#f5f7fb",
