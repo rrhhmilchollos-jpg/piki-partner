@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Settings,
   Store,
+  TabletSmartphone,
   Users,
   X,
 } from "lucide-react";
@@ -22,7 +23,7 @@ import MenuEditor from "./MenuEditor";
 import KitchenScreen from "./KitchenScreen";
 
 type ApiStatus = "checking" | "ready" | "unavailable";
-type View = "Resumen" | "Alta de comercio" | "Pedidos" | "Catálogo" | "Equipo" | "Ajustes";
+type View = "Resumen" | "Alta de comercio" | "Pedidos" | "PDA Cocina" | "Catálogo" | "Equipo" | "Ajustes";
 
 const apiOrigin = (import.meta.env.VITE_API_URL ?? "https://api.pikidelivery.com").replace(/\/$/, "");
 
@@ -30,13 +31,15 @@ const navigation: Array<{ label: View; icon: typeof LayoutDashboard }> = [
   { label: "Resumen", icon: LayoutDashboard },
   { label: "Alta de comercio", icon: Store },
   { label: "Pedidos", icon: ClipboardList },
+  { label: "PDA Cocina", icon: TabletSmartphone },
   { label: "Catálogo", icon: PackageOpen },
   { label: "Equipo", icon: Users },
   { label: "Ajustes", icon: Settings },
 ];
 
 function App() {
-  const [activeView, setActiveView] = useState<View>("Resumen");
+  const pdaMode = new URLSearchParams(window.location.search).get("mode") === "pda";
+  const [activeView, setActiveView] = useState<View>(pdaMode ? "PDA Cocina" : "Resumen");
   const [menuOpen, setMenuOpen] = useState(false);
   const [apiStatus, setApiStatus] = useState<ApiStatus>("checking");
   const [apiMessage, setApiMessage] = useState("Comprobando la disponibilidad de la plataforma.");
@@ -72,13 +75,13 @@ function App() {
   }, [checkApi]);
 
   function selectView(view: View) {
-    if ((view === "Pedidos" || view === "Catálogo" || view === "Equipo" || view === "Ajustes") && !apiToken) setAuthRequired(true);
+    if ((view === "Pedidos" || view === "PDA Cocina" || view === "Catálogo" || view === "Equipo" || view === "Ajustes") && !apiToken) setAuthRequired(true);
     setActiveView(view);
     setMenuOpen(false);
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${pdaMode ? "pda-mode" : ""}`}>
       <aside className={`sidebar ${menuOpen ? "sidebar-open" : ""}`} aria-label="Navegación principal">
         <div className="brand-block">
           <div className="brand-mark">P</div>
@@ -184,6 +187,7 @@ function App() {
           {activeView === "Alta de comercio" && <PartnerOnboarding apiOrigin={apiOrigin} onComplete={refreshApiStatus} />}
 
           {activeView === "Pedidos" && apiToken && <KitchenScreen apiOrigin={apiOrigin} token={apiToken} />}
+          {activeView === "PDA Cocina" && apiToken && <KitchenScreen apiOrigin={apiOrigin} token={apiToken} pdaMode />}
           {activeView === "Catálogo" && apiToken && <MenuEditor apiOrigin={apiOrigin} token={apiToken} />}
           {activeView !== "Resumen" && activeView !== "Alta de comercio" && activeView !== "Pedidos" && activeView !== "Catálogo" && (
             <section className="feature-empty">
