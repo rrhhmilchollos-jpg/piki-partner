@@ -17,6 +17,9 @@ import {
 } from "lucide-react";
 import "./App.css";
 import PartnerOnboarding from "./PartnerOnboarding";
+import EmployeeAuthGate from "./EmployeeAuthGate";
+import MenuEditor from "./MenuEditor";
+import KitchenScreen from "./KitchenScreen";
 
 type ApiStatus = "checking" | "ready" | "unavailable";
 type View = "Resumen" | "Alta de comercio" | "Pedidos" | "Catálogo" | "Equipo" | "Ajustes";
@@ -37,6 +40,8 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [apiStatus, setApiStatus] = useState<ApiStatus>("checking");
   const [apiMessage, setApiMessage] = useState("Comprobando la disponibilidad de la plataforma.");
+  const [apiToken, setApiToken] = useState(() => sessionStorage.getItem(`piki-${location.hostname}-api-token`) || "");
+  const [authRequired, setAuthRequired] = useState(false);
 
   const checkApi = useCallback(async () => {
     try {
@@ -67,6 +72,7 @@ function App() {
   }, [checkApi]);
 
   function selectView(view: View) {
+    if ((view === "Pedidos" || view === "Catálogo" || view === "Equipo" || view === "Ajustes") && !apiToken) setAuthRequired(true);
     setActiveView(view);
     setMenuOpen(false);
   }
@@ -131,6 +137,7 @@ function App() {
         </header>
 
         <section className="page-content">
+          {authRequired && <EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); }} />}
           {activeView === "Resumen" && (
             <>
               <div className="page-heading">
@@ -176,7 +183,9 @@ function App() {
 
           {activeView === "Alta de comercio" && <PartnerOnboarding apiOrigin={apiOrigin} onComplete={refreshApiStatus} />}
 
-          {activeView !== "Resumen" && activeView !== "Alta de comercio" && (
+          {activeView === "Pedidos" && apiToken && <KitchenScreen apiOrigin={apiOrigin} token={apiToken} />}
+          {activeView === "Catálogo" && apiToken && <MenuEditor apiOrigin={apiOrigin} token={apiToken} />}
+          {activeView !== "Resumen" && activeView !== "Alta de comercio" && activeView !== "Pedidos" && activeView !== "Catálogo" && (
             <section className="feature-empty">
               <div className="feature-icon"><PackageOpen size={26} /></div>
               <p className="eyebrow">{activeView.toUpperCase()}</p>
