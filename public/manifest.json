@@ -1,1 +1,16 @@
-{"name":"PIKI Partners","short_name":"PIKI Partners","description":"Gestiona tu restaurante, carta y pedidos en PIKI.","start_url":"/","display":"standalone","background_color":"#f5f7fb","theme_color":"#c9ff60","lang":"es","icons":[{"src":"/piki-icon.png","sizes":"192x192","type":"image/png","purpose":"any maskable"}]}
+{
+  "id": "https://partners.pikidelivery.com/",
+  "name": "PIKI Partners · PDA Cocina",
+  "short_name": "PIKI Cocina",
+  "description": "PDA de cocina PIKI para aceptar pedidos, preparar comandas y marcar recogidas.",
+  "start_url": "https://partners.pikidelivery.com/?mode=pda",
+  "scope": "https://partners.pikidelivery.com/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f7fb",
+  "theme_color": "#c9ff60",
+  "lang": "es-ES",
+  "categories": ["business", "food", "utilities"],
+  "icons": [{ "src": "/piki-icon.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" }],
+  "shortcuts": [{ "name": "Abrir cocina", "short_name": "Cocina", "url": "/?mode=pda", "icons": [{ "src": "/piki-icon.png", "sizes": "192x192", "type": "image/png" }] }]
+}

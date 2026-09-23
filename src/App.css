@@ -110,3 +110,23 @@ h1 { margin: 0; max-width: 680px; font-size: clamp(34px,4vw,49px); letter-spacin
 .form-security { display:flex; align-items:center; gap:7px; color:#7a8aa4; font-size:11px; margin:0; }
 @media (max-width:900px) { .onboarding-steps { grid-template-columns:repeat(2,1fr); } }
 @media (max-width:620px) { .form-grid,.documents-grid { grid-template-columns:1fr; } .onboarding-progress { align-items:flex-start; flex-direction:column; gap:8px; } .hours-grid label { grid-template-columns:1fr 1fr 1fr; } .hours-grid label span { grid-column:1/-1; } .form-actions { justify-content:stretch; } .form-actions button { flex:1; } }
+
+/* PIKI PDA Cocina: targets táctiles grandes para tablets y terminales de establecimiento */
+.pda-mode .sidebar { display: none; }
+.pda-mode .main-content { margin-left: 0; width: 100%; }
+.pda-mode .page-content { width: min(1280px, calc(100% - 48px)); padding-top: 34px; }
+.pda-kitchen .table-heading h1 { font-size: clamp(34px, 5vw, 58px); }
+.pda-kitchen .lead { max-width: 760px; }
+.pda-order-grid { display: grid; gap: 18px; }
+.pda-order-card { align-items: stretch; padding: 24px; gap: 24px; }
+.pda-order-card strong { font-size: 20px; }
+.pda-order-card small { margin-top: 8px; }
+.pda-order-card ul { margin: 13px 0 0; padding-left: 19px; color: #506078; font-size: 15px; line-height: 1.7; }
+.kitchen-status { display: inline-flex; width: fit-content; margin: 8px 0 0; border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 850; }
+.status-pending { color: #7e5b00; background: #fff2bd; }
+.status-accepted { color: #28527d; background: #e0efff; }
+.status-preparing { color: #8c4f15; background: #ffe7c4; }
+.status-ready_for_pickup { color: #34712b; background: #e1f6d9; }
+.pda-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.pda-actions button { min-height: 52px; padding-inline: 20px; font-size: 15px; }
+@media (max-width: 700px) { .pda-mode .page-content { width: min(100% - 24px, 640px); padding-top: 22px; } .pda-order-card { padding: 18px; } .pda-actions { justify-content: stretch; } .pda-actions button { flex: 1 1 100%; } }
