@@ -33,7 +33,7 @@ type OnboardingResponse = {
   status?: string;
 };
 
-const apiOrigin = (import.meta.env.VITE_API_URL ?? "https://piki-api-e0yg.onrender.com").replace(/\/$/, "");
+const apiOrigin = (import.meta.env.VITE_API_URL ?? "https://api.pikidelivery.com").replace(/\/$/, "");
 
 const navigation: Array<{ label: View; icon: typeof LayoutDashboard }> = [
   { label: "Resumen", icon: LayoutDashboard },
