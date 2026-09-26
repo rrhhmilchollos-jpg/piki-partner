@@ -1,4 +1,4 @@
-export const PARTNER_RELEASE_VERSION = "0.2.2";
+export const PARTNER_RELEASE_VERSION = "0.2.6";
 export const PARTNER_SURFACE = "partner";
 
 export type ReleaseManifest = {
