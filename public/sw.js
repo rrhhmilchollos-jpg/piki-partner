@@ -1,47 +1,21 @@
-const CACHE_NAME = "piki-partner-v0.2.2";
-const OWN_CACHE_PREFIXES = ["piki-partner-"];
-
-function isOwnCache(name) {
-  return OWN_CACHE_PREFIXES.some((prefix) => name.startsWith(prefix));
-}
-
-function mustBypassCache(request) {
-  const url = new URL(request.url);
-  return url.origin !== self.location.origin
-    || url.pathname === "/release.json"
-    || url.pathname.startsWith("/api/")
-    || url.pathname.startsWith("/auth/");
-}
-
-async function cacheSuccessfulResponse(request, response) {
-  if (response.ok && response.type === "basic") {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.put(request, response.clone());
-  }
-  return response;
-}
-
-async function networkFirst(request) {
-  try {
-    return await cacheSuccessfulResponse(request, await fetch(request));
-  } catch {
-    const cached = await caches.match(request);
-    if (cached) return cached;
-    if (request.mode === "navigate") return (await caches.match("/")) || Response.error();
-    return Response.error();
-  }
-}
+const BUILD_ID = "263f96942fac";
+const CACHE_PREFIX = "piki-partner-";
+const CACHE_NAME = `${CACHE_PREFIX}${BUILD_ID}`;
+const APP_SHELL = ["/","/manifest.json","/piki-delivery-192.png","/piki-delivery-512.png"];
+const CONTROL_PATHS = new Set(["/sw.js", "/release.json", "/manifest.json"]);
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(APP_SHELL);
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    const cacheNames = await caches.keys();
-    await Promise.all(cacheNames
-      .filter((name) => isOwnCache(name) && name !== CACHE_NAME)
-      .map((name) => caches.delete(name)));
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME).map((key) => caches.delete(key)));
     await self.clients.claim();
   })());
 });
@@ -52,8 +26,52 @@ self.addEventListener("message", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  if (request.method !== "GET" || mustBypassCache(request)) return;
+  if (request.method !== "GET") return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || CONTROL_PATHS.has(url.pathname) || url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/") || request.headers.has("authorization")) return;
+  if (request.mode === "navigate") {
+    event.respondWith(fetch(request).catch(async () => (await caches.match("/")) || Response.error()));
+    return;
+  }
+  event.respondWith((async () => {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    const response = await fetch(request);
+    if (response.ok && response.type === "basic") {
+      const cache = await caches.open(CACHE_NAME);
+      event.waitUntil(cache.put(request, response.clone()));
+    }
+    return response;
+  })());
+});
 
-  // HTML is deliberately network-first so installed clients receive the current shell.
-  event.respondWith(networkFirst(request));
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try { payload = event.data ? event.data.json() : {}; } catch { payload = { body: event.data?.text() || "" }; }
+  const title = typeof payload.title === "string" ? payload.title : "PIKI";
+  const body = typeof payload.body === "string" ? payload.body : "Tienes una actualización.";
+  const path = typeof payload.url === "string" && payload.url.startsWith("/") ? payload.url : "/";
+  event.waitUntil(self.registration.showNotification(title, {
+    body,
+    icon: "/piki-icon-192.png",
+    badge: "/piki-icon-192.png",
+    tag: typeof payload.tag === "string" ? payload.tag : "piki-notification",
+    renotify: Boolean(payload.renotify),
+    data: { path },
+  }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.path || "/", self.location.origin).href;
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const existing = clients.find((client) => client.url.startsWith(self.location.origin));
+    if (existing) return existing.focus();
+    return self.clients.openWindow(target);
+  })());
+});
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => clients.forEach((client) => client.postMessage({ type: "PIKI_PUSH_SUBSCRIPTION_CHANGED" }))));
 });
