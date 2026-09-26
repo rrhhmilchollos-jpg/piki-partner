@@ -15,6 +15,7 @@ type WebkitWindow = typeof window & { webkitAudioContext?: typeof AudioContext }
  * It deliberately does not depend on a server polling timer: KitchenScreen
  * feeds it from the SSE event and from the REST reconciliation response.
  */
+// oxlint-disable-next-line react/only-export-components
 export function usePartnerOrderAlarm() {
   const pendingOrderIds = useRef(new Set<string>());
   const audioContext = useRef<AudioContext | null>(null);
