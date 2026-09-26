@@ -1,7 +1,7 @@
-const BUILD_ID = "8257a480b192";
+const BUILD_ID = "442f727330e8";
 const CACHE_PREFIX = "piki-partner-";
 const CACHE_NAME = `${CACHE_PREFIX}${BUILD_ID}`;
-const APP_SHELL = ["/","/manifest.json","/piki-delivery-192.png","/piki-delivery-512.png"];
+const APP_SHELL = ["/","/manifest.json","/piki-icon-192.png","/piki-icon-512.png"];
 const CONTROL_PATHS = new Set(["/sw.js", "/release.json", "/manifest.json"]);
 
 self.addEventListener("install", (event) => {
