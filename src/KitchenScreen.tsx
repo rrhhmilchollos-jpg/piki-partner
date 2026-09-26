@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PartnerOrderAlarmBanner, type PartnerKitchenOrder, usePartnerOrderAlarm } from "./PartnerOrderAlarm";
 import { connectPikiRealtime } from "./realtime";
 
@@ -32,7 +32,7 @@ export default function KitchenScreen({ apiOrigin, token, pdaMode = false }: { a
     notifyPaidOrder,
     resolveOrder,
   } = usePartnerOrderAlarm();
-  const headers = { Authorization: `Bearer ${token}` };
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
   const load = useCallback(async () => {
     try {
@@ -44,9 +44,10 @@ export default function KitchenScreen({ apiOrigin, token, pdaMode = false }: { a
     } catch {
       setMessage("No hay conexión con la API. Conserva la última lista hasta recuperar sincronización.");
     }
-  }, [apiOrigin, token, reconcileKitchenOrders]);
+  }, [apiOrigin, headers, reconcileKitchenOrders]);
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect
     void load();
     const id = window.setInterval(() => void load(), 30_000);
     return () => window.clearInterval(id);

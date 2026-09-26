@@ -78,6 +78,7 @@ async function waitForControllerChange(): Promise<void> {
   });
 }
 
+// oxlint-disable-next-line react/only-export-components
 export function installPikiReleaseHeaders(): void {
   const state = window as unknown as { __pikiReleaseFetchInstalled?: boolean };
   if (state.__pikiReleaseFetchInstalled) return;
@@ -172,6 +173,8 @@ function PushConsentControl() {
     const authenticated = customerSurface || Boolean(storedEmployeeToken());
     const permission = "Notification" in window ? Notification.permission : "default";
     if (!shouldShowPushConsent({ supported, authenticated, permission })) {
+      // Browser permission is authoritative; background sync must not resurrect the card.
+      // oxlint-disable-next-line react/set-state-in-effect
       setVisible(false);
       if (permission === "granted") {
         void syncPushSubscription(false).catch((error) => console.warn("No se pudo sincronizar la suscripción de avisos.", error));
@@ -243,6 +246,7 @@ export function PikiReleaseGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     installPikiReleaseHeaders();
+    // oxlint-disable-next-line react/set-state-in-effect
     void check();
     const onFocus = () => void check();
     window.addEventListener("focus", onFocus);
