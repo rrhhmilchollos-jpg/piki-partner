@@ -170,15 +170,27 @@ function PushConsentControl() {
     if (!supported) return;
     const authenticated = customerSurface || Boolean(storedEmployeeToken());
     if (!authenticated) { setVisible(false); return; }
-    if (Notification.permission === "default") { setVisible(true); return; }
-    if (Notification.permission === "granted") {
-      void syncPushSubscription(false).then(() => { setMessage(""); setVisible(false); }).catch((error) => { setMessage(error instanceof Error ? error.message : "No se pudo registrar este dispositivo."); setVisible(true); });
+    // The consent card is only actionable while the browser has not decided.
+    // Once permission is granted or denied, never leave a blocking card visible.
+    if (Notification.permission !== "default") {
+      setVisible(false);
+      if (Notification.permission === "granted") {
+        void syncPushSubscription(false).catch((error) => console.warn("No se pudo sincronizar la suscripción de avisos.", error));
+      }
+      return;
     }
+    setVisible(true);
   }, [authEpoch, customerSurface, supported]);
   const enable = useCallback(async () => {
     setBusy(true); setMessage("");
-    try { setMessage(await syncPushSubscription(true)); window.setTimeout(() => setVisible(false), 900); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "No se pudieron activar los avisos."); setVisible(true); }
+    try { await syncPushSubscription(true); setMessage(""); setVisible(false); }
+    catch (error) {
+      // Browser permission is authoritative. Do not resurrect the card after a
+      // granted/denied decision; the silent sync above will retry on next focus.
+      const permission = "Notification" in window ? Notification.permission : "default";
+      if (permission === "default") { setMessage(error instanceof Error ? error.message : "No se pudieron activar los avisos."); setVisible(true); }
+      else { setMessage(""); setVisible(false); console.warn("No se pudo registrar este dispositivo para avisos.", error); }
+    }
     finally { setBusy(false); }
   }, []);
   useEffect(() => {
