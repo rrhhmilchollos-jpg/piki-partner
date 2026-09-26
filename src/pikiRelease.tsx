@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { PIKI_RELEASE } from "./release-meta";
+import { shouldShowPushConsent } from "./pushConsentPolicy";
 
 type ReleasePolicy = {
   surface?: unknown;
@@ -169,16 +170,15 @@ function PushConsentControl() {
   useEffect(() => {
     if (!supported) return;
     const authenticated = customerSurface || Boolean(storedEmployeeToken());
-    if (!authenticated) { setVisible(false); return; }
-    // The consent card is only actionable while the browser has not decided.
-    // Once permission is granted or denied, never leave a blocking card visible.
-    if (Notification.permission !== "default") {
+    const permission = "Notification" in window ? Notification.permission : "default";
+    if (!shouldShowPushConsent({ supported, authenticated, permission })) {
       setVisible(false);
-      if (Notification.permission === "granted") {
+      if (permission === "granted") {
         void syncPushSubscription(false).catch((error) => console.warn("No se pudo sincronizar la suscripción de avisos.", error));
       }
       return;
     }
+    // The consent card is actionable only while browser permission is undecided.
     setVisible(true);
   }, [authEpoch, customerSurface, supported]);
   const enable = useCallback(async () => {
@@ -196,7 +196,11 @@ function PushConsentControl() {
   useEffect(() => {
     if (!supported) return;
     const listener = (event: MessageEvent) => {
-      if (event.data?.type === "PIKI_PUSH_SUBSCRIPTION_CHANGED" && Notification.permission === "granted") void syncPushSubscription(false).catch(() => setVisible(true));
+      if (event.data?.type === "PIKI_PUSH_SUBSCRIPTION_CHANGED" && Notification.permission === "granted") void syncPushSubscription(false).catch((error) => {
+          console.warn("No se pudo resincronizar la suscripción de avisos.", error);
+          setMessage("");
+          setVisible(false);
+        });
     };
     navigator.serviceWorker.addEventListener("message", listener);
     return () => navigator.serviceWorker.removeEventListener("message", listener);

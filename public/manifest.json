@@ -2,7 +2,7 @@
   "id": "/",
   "name": "PIKI Partners · PDA Cocina",
   "short_name": "PIKI Cocina",
-  "version": "0.2.2",
+  "version": "0.2.6",
   "description": "PDA de cocina PIKI para aceptar pedidos, preparar comandas y marcar recogidas.",
   "start_url": "/",
   "scope": "/",
