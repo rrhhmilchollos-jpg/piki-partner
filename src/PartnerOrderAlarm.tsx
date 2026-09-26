@@ -4,6 +4,8 @@ export type PartnerKitchenOrder = {
   _id: string;
   status: string;
   paymentState?: string;
+  paymentMethod?: "stripe" | "bizum" | "cash";
+  cashDueAtDelivery?: boolean;
 };
 
 type WebkitWindow = typeof window & { webkitAudioContext?: typeof AudioContext };
@@ -61,7 +63,7 @@ export function usePartnerOrderAlarm() {
   const reconcileKitchenOrders = useCallback((orders: PartnerKitchenOrder[]) => {
     pendingOrderIds.current = new Set(
       orders
-        .filter((order) => order.status === "pending" && order.paymentState === "paid")
+        .filter((order) => order.status === "pending" && (order.paymentState === "paid" || order.paymentMethod === "cash" || order.cashDueAtDelivery))
         .map((order) => order._id),
     );
     updateCount();
@@ -113,7 +115,7 @@ export function PartnerOrderAlarmBanner({ count, audioReady, onEnableAudio }: {
 }) {
   if (!count) return null;
   return <div className="status-pill" role="alert" aria-live="assertive">
-    <strong>Alarma activa:</strong> hay {count} pedido{count === 1 ? "" : "s"} pagado{count === 1 ? "" : "s"} esperando aceptación.
+    <strong>Alarma activa:</strong> hay {count} pedido{count === 1 ? "" : "s"} nuevo{count === 1 ? "" : "s"} esperando aceptación. Si es efectivo, el Rider cobrará en la entrega.
     {!audioReady && <button className="secondary-button" type="button" onClick={onEnableAudio} style={{ marginLeft: "10px" }}>Activar sonido</button>}
   </div>;
 }
