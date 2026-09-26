@@ -43,9 +43,16 @@ function isValidPolicy(value: ReleasePolicy): value is ValidPolicy {
 
 async function registerWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) return null;
-  const registration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
-  await registration.update();
-  return registration;
+  try {
+    const registration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
+    await registration.update();
+    return registration;
+  } catch (error) {
+    // The API policy remains authoritative. A stale browser registration must not
+    // prevent a partner from operating while the browser repairs its PWA cache.
+    console.warn("No se pudo actualizar el Service Worker de PIKI Partner.", error);
+    return null;
+  }
 }
 
 async function waitForWaitingWorker(registration: ServiceWorkerRegistration): Promise<ServiceWorker | null> {
