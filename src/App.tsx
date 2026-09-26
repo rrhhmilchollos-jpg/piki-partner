@@ -80,7 +80,7 @@ function App() {
     setMenuOpen(false);
   }
 
-  if (!apiToken || authRequired) return <main className="page-content"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); }} /></main>;
+  if (!apiToken || authRequired) return <main className="page-content"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); window.dispatchEvent(new Event("piki-authenticated")); }} /></main>;
 
   return (
     <div className={`app-shell ${pdaMode ? "pda-mode" : ""}`}>
@@ -142,7 +142,7 @@ function App() {
         </header>
 
         <section className="page-content">
-          {authRequired && <EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); }} />}
+          {authRequired && <EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); window.dispatchEvent(new Event("piki-authenticated")); }} />}
           {activeView === "Resumen" && (
             <>
               <div className="page-heading">

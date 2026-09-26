@@ -14,7 +14,11 @@ const labels: Record<string, string> = {
   accepted: "Aceptado",
   preparing: "En preparación",
   ready_for_pickup: "Listo para recoger",
+  picked_up: "Recogido por el Rider",
+  on_the_way: "En ruta al cliente",
 };
+
+const isCashOrder = (order: { cashDueAtDelivery?: boolean; paymentMethod?: string }) => Boolean(order.cashDueAtDelivery || order.paymentMethod === "cash");
 
 export default function KitchenScreen({ apiOrigin, token, pdaMode = false }: { apiOrigin: string; token: string; pdaMode?: boolean }) {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -56,7 +60,7 @@ export default function KitchenScreen({ apiOrigin, token, pdaMode = false }: { a
       if (event.type === "order.awaiting_partner_acceptance") {
         const orderId = String(event.payload.orderId || "");
         notifyPaidOrder(orderId);
-        setMessage(event.payload?.cashDueAtDelivery ? "Nuevo pedido en efectivo. El Rider cobrará el importe exacto al entregar." : "Nuevo pedido pagado. Acepta el pedido para detener la alarma y activar el reparto.");
+        setMessage(isCashOrder(event.payload) ? "Nuevo pedido en efectivo. El Rider cobrará el importe exacto al entregar." : "Nuevo pedido pagado. Acepta el pedido para detener la alarma y activar el reparto.");
       }
       void load();
     },
@@ -101,7 +105,7 @@ export default function KitchenScreen({ apiOrigin, token, pdaMode = false }: { a
         <div>
           <strong>Pedido {order._id.slice(-6)}</strong>
           <span className={`kitchen-status status-${order.status}`}>{labels[order.status] || order.status}</span>
-          <small>{new Date(order.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} · {order.deliveryAddress || "Dirección disponible"}</small><small>{order.paymentMethod === "cash" ? `EFECTIVO · cobra Rider ${(Number(order.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}` : "Pago online confirmado"}</small>
+          <small>{new Date(order.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} · {order.deliveryAddress || "Dirección disponible"}</small><small>{isCashOrder(order) ? `EFECTIVO · cobra Rider ${(Number(order.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}` : "Pago online confirmado"}</small>
           <ul>{(order.items || []).map((item, index) => <li key={`${order._id}-${index}`}>{item.quantity || 1} × {item.name || "Producto"}</li>)}</ul>
         </div>
         <div className="pda-actions">
