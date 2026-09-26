@@ -1,15 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import {
-  Activity,
   Bell,
   Building2,
-  CheckCircle2,
   ChevronRight,
   ClipboardList,
   LayoutDashboard,
   Menu,
   PackageOpen,
-  RefreshCw,
   Settings,
   Store,
   TabletSmartphone,
@@ -22,7 +19,6 @@ import EmployeeAuthGate from "./EmployeeAuthGate";
 import MenuEditor from "./MenuEditor";
 import KitchenScreen from "./KitchenScreen";
 
-type ApiStatus = "checking" | "ready" | "unavailable";
 type View = "Resumen" | "Alta de comercio" | "Pedidos" | "PDA Cocina" | "Catálogo" | "Equipo" | "Ajustes";
 
 const apiOrigin = (import.meta.env.VITE_API_URL ?? "https://api.pikidelivery.com").replace(/\/$/, "");
@@ -41,38 +37,9 @@ function App() {
   const pdaMode = new URLSearchParams(window.location.search).get("mode") === "pda";
   const [activeView, setActiveView] = useState<View>(pdaMode ? "PDA Cocina" : "Resumen");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [apiStatus, setApiStatus] = useState<ApiStatus>("checking");
-  const [apiMessage, setApiMessage] = useState("Comprobando la disponibilidad de la plataforma.");
   const [apiToken, setApiToken] = useState(() => sessionStorage.getItem(`piki-${location.hostname}-api-token`) || "");
   const [authRequired, setAuthRequired] = useState(false);
-
-  const checkApi = useCallback(async () => {
-    try {
-      const response = await fetch(`${apiOrigin}/ready`);
-      const payload = (await response.json()) as { status?: string; database?: string };
-      if (!response.ok || payload.status !== "ready") {
-        throw new Error("API_NOT_READY");
-      }
-      setApiStatus("ready");
-      setApiMessage("API y PostgreSQL de producción están conectados.");
-    } catch {
-      setApiStatus("unavailable");
-      setApiMessage("La conexión no está disponible ahora. Inténtalo de nuevo en unos segundos.");
-    }
-  }, []);
-
-  function refreshApiStatus() {
-    setApiStatus("checking");
-    setApiMessage("Comprobando la conexión segura con PIKI API.");
-    void checkApi();
-  }
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void checkApi();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [checkApi]);
+  const [publicOnboarding, setPublicOnboarding] = useState(false);
 
   function selectView(view: View) {
     if ((view === "Pedidos" || view === "PDA Cocina" || view === "Catálogo" || view === "Equipo" || view === "Ajustes") && !apiToken) setAuthRequired(true);
@@ -80,7 +47,7 @@ function App() {
     setMenuOpen(false);
   }
 
-  if (!apiToken || authRequired) return <main className="page-content"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); window.dispatchEvent(new Event("piki-authenticated")); }} /></main>;
+  if (!apiToken || authRequired) return <main className="page-content">{publicOnboarding ? <PartnerOnboarding apiOrigin={apiOrigin} onComplete={() => { setPublicOnboarding(false); setActiveView("Resumen"); }} /> : <EmployeeAuthGate apiOrigin={apiOrigin} onStartOnboarding={() => { setAuthRequired(false); setPublicOnboarding(true); }} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); setPublicOnboarding(false); window.dispatchEvent(new Event("piki-authenticated")); }} />}</main>;
 
   return (
     <div className={`app-shell ${pdaMode ? "pda-mode" : ""}`}>
@@ -142,7 +109,7 @@ function App() {
         </header>
 
         <section className="page-content">
-          {authRequired && <EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); window.dispatchEvent(new Event("piki-authenticated")); }} />}
+          {authRequired && <EmployeeAuthGate apiOrigin={apiOrigin} onStartOnboarding={() => { setAuthRequired(false); setActiveView("Alta de comercio"); }} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); window.dispatchEvent(new Event("piki-authenticated")); }} />}
           {activeView === "Resumen" && (
             <>
               <div className="page-heading">
@@ -151,22 +118,8 @@ function App() {
                   <h1>Buenas decisiones, desde el primer pedido.</h1>
                   <p className="lead">El panel está conectado al núcleo de producción de PIKI. Da de alta comercios y prepara la operativa real.</p>
                 </div>
-                <button className="secondary-button" type="button" onClick={refreshApiStatus} disabled={apiStatus === "checking"}>
-                  <RefreshCw size={17} className={apiStatus === "checking" ? "spin" : ""} />
-                  Actualizar estado
-                </button>
               </div>
 
-              <section className={`connection-card connection-${apiStatus}`}>
-                <div className="connection-icon">
-                  {apiStatus === "ready" ? <CheckCircle2 size={24} /> : <Activity size={24} />}
-                </div>
-                <div className="connection-copy">
-                  <p>{apiStatus === "ready" ? "Producción conectada" : apiStatus === "checking" ? "Verificando producción" : "Conexión pendiente"}</p>
-                  <span>{apiMessage}</span>
-                </div>
-                <span className="connection-url">{apiOrigin.replace("https://", "")}</span>
-              </section>
 
               <section className="empty-state-grid">
                 <article className="empty-card primary-empty">
@@ -186,7 +139,7 @@ function App() {
             </>
           )}
 
-          {activeView === "Alta de comercio" && <PartnerOnboarding apiOrigin={apiOrigin} onComplete={refreshApiStatus} />}
+          {activeView === "Alta de comercio" && <PartnerOnboarding apiOrigin={apiOrigin} />}
 
           {activeView === "Pedidos" && apiToken && <KitchenScreen apiOrigin={apiOrigin} token={apiToken} />}
           {activeView === "PDA Cocina" && apiToken && <KitchenScreen apiOrigin={apiOrigin} token={apiToken} pdaMode />}
