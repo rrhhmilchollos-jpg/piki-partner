@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Printer } from "lucide-react";
 import { PartnerOrderAlarmBanner, type PartnerKitchenOrder, usePartnerOrderAlarm } from "./PartnerOrderAlarm";
 import { connectPikiRealtime } from "./realtime";
 
@@ -6,7 +7,7 @@ type Order = PartnerKitchenOrder & {
 	publicCode?: string;
   createdAt: string;
   deliveryAddress?: string;
-  items?: { name?: string; quantity?: number }[];
+  items?: { name?: string; quantity?: number; priceCents?: number }[];
   totalCents?: number;
   pickupQrUrl?: string | null;
   pickupPin?: string | null;
@@ -27,6 +28,7 @@ export default function KitchenScreen({ apiOrigin, token, pdaMode = false }: { a
   const [orders, setOrders] = useState<Order[]>([]);
   const [message, setMessage] = useState("");
   const [busyOrderId, setBusyOrderId] = useState("");
+  const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
   const {
     activeCount,
     audioReady,
@@ -93,6 +95,11 @@ export default function KitchenScreen({ apiOrigin, token, pdaMode = false }: { a
     } finally { setBusyOrderId(""); }
   }
 
+  function printThermalTicket(order: Order) {
+    setPrintingOrder(order);
+    window.setTimeout(() => window.print(), 40);
+  }
+
   return <section className={`application-table ${pdaMode ? "pda-kitchen" : ""}`} aria-label="Pantalla de cocina PIKI">
     <div className="table-heading">
       <div>
@@ -117,9 +124,23 @@ export default function KitchenScreen({ apiOrigin, token, pdaMode = false }: { a
           {order.status === "pending" && <button className="primary-button" disabled={busyOrderId === order._id} onClick={() => void move(order._id, "accepted")}>{busyOrderId === order._id ? "Aceptando…" : "Aceptar pedido"}</button>}
           {order.status === "accepted" && <button className="primary-button" disabled={busyOrderId === order._id} onClick={() => void move(order._id, "preparing")}>Comenzar preparación</button>}
           {order.status === "preparing" && <button className="primary-button" disabled={busyOrderId === order._id} onClick={() => void move(order._id, "ready_for_pickup")}>Marcar listo</button>}
+          <button className="secondary-button" type="button" onClick={() => printThermalTicket(order)}><Printer size={16} /> Imprimir ticket 58 mm</button>
           <button className="secondary-button" disabled={busyOrderId === order._id} onClick={() => void move(order._id, "cancelled")}>Incidencia</button>
         </div>
       </article>)}</div>
       : <p className="empty-copy">No hay pedidos pendientes en cocina.</p>}
+    {printingOrder && <div className="thermal-ticket" aria-hidden="true">
+      <header><strong>PIKI DELIVERY</strong><span>TICKET DE PEDIDO</span></header>
+      <div className="thermal-rule" />
+      <section className="thermal-order-id"><b>#{printingOrder.publicCode || printingOrder._id}</b><span>{new Date(printingOrder.createdAt).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}</span></section>
+      <p className="thermal-status">{labels[printingOrder.status] || printingOrder.status}</p>
+      <div className="thermal-rule" />
+      <ul>{(printingOrder.items || []).map((item, index) => <li key={`${printingOrder._id}-ticket-${index}`}><span>{item.quantity || 1} × {item.name || "Producto"}</span>{item.priceCents != null && <b>{((item.priceCents * (item.quantity || 1)) / 100).toFixed(2).replace(".", ",")} €</b>}</li>)}</ul>
+      <div className="thermal-rule" />
+      <p className="thermal-line"><span>Pago</span><b>{isCashOrder(printingOrder) ? "EFECTIVO · cobra Rider" : "PAGADO ONLINE"}</b></p>
+      <p className="thermal-line"><span>Total</span><b>{(Number(printingOrder.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}</b></p>
+      {printingOrder.pickupPin && <><div className="thermal-rule" /><p className="thermal-pickup-label">ENTREGA AL RIDER</p><p className="thermal-pin">{printingOrder.pickupPin}</p><p className="thermal-help">Muestra este PIN o el QR de recogida cuando el pedido esté listo.</p></>}
+      <footer>Gracias por colaborar con PIKI<br />partners.pikidelivery.com</footer>
+    </div>}
   </section>;
 }
