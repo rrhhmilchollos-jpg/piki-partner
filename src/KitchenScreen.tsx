@@ -7,6 +7,8 @@ type Order = PartnerKitchenOrder & {
   deliveryAddress?: string;
   items?: { name?: string; quantity?: number }[];
   totalCents?: number;
+  pickupQrUrl?: string | null;
+  pickupPin?: string | null;
 };
 
 const labels: Record<string, string> = {
@@ -108,6 +110,7 @@ export default function KitchenScreen({ apiOrigin, token, pdaMode = false }: { a
           <span className={`kitchen-status status-${order.status}`}>{labels[order.status] || order.status}</span>
           <small>{new Date(order.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} · {order.deliveryAddress || "Dirección disponible"}</small><small>{isCashOrder(order) ? `EFECTIVO · cobra Rider ${(Number(order.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}` : "Pago online confirmado"}</small>
           <ul>{(order.items || []).map((item, index) => <li key={`${order._id}-${index}`}>{item.quantity || 1} × {item.name || "Producto"}</li>)}</ul>
+          {order.status === "ready_for_pickup" && order.pickupQrUrl && <div className="pickup-verification" aria-label="Código para autorizar la recogida del rider"><div><strong>Entrega al rider</strong><span>Muéstrale este QR para autorizar la recogida</span><b>PIN: {order.pickupPin || "—"}</b></div><img src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=4&data=${encodeURIComponent(order.pickupQrUrl)}`} alt="QR de recogida" /></div>}
         </div>
         <div className="pda-actions">
           {order.status === "pending" && <button className="primary-button" disabled={busyOrderId === order._id} onClick={() => void move(order._id, "accepted")}>{busyOrderId === order._id ? "Aceptando…" : "Aceptar pedido"}</button>}
