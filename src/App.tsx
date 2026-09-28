@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  Bell,
   Building2,
   ChevronRight,
   ClipboardList,
@@ -18,6 +17,7 @@ import PartnerOnboarding from "./PartnerOnboarding";
 import EmployeeAuthGate from "./EmployeeAuthGate";
 import MenuEditor from "./MenuEditor";
 import KitchenScreen from "./KitchenScreen";
+import NotificationCenter from "./NotificationCenter";
 
 type View = "Resumen" | "Alta de comercio" | "Pedidos" | "PDA Cocina" | "Catálogo" | "Equipo" | "Ajustes";
 
@@ -101,9 +101,7 @@ function App() {
             <span className="status-dot" aria-hidden="true" />
           </div>
           <div className="topbar-actions">
-            <button className="icon-button" type="button" aria-label="Notificaciones" onClick={() => setActiveView("Pedidos")}>
-              <Bell size={19} />
-            </button>
+            <NotificationCenter apiOrigin={apiOrigin} token={apiToken} surface="partner" />
             <div className="user-avatar" aria-label="Usuario de PIKI">P</div>
           </div>
         </header>
