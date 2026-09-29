@@ -8,24 +8,21 @@ import {
   Menu,
   PackageOpen,
   Settings,
-  Store,
   TabletSmartphone,
   Users,
   X,
 } from "lucide-react";
 import "./App.css";
-import PartnerOnboarding from "./PartnerOnboarding";
 import EmployeeAuthGate from "./EmployeeAuthGate";
 import MenuEditor from "./MenuEditor";
 import KitchenScreen from "./KitchenScreen";
 
-type View = "Resumen" | "Alta de comercio" | "Pedidos" | "PDA Cocina" | "Catálogo" | "Equipo" | "Ajustes";
+type View = "Resumen" | "Pedidos" | "PDA Cocina" | "Catálogo" | "Equipo" | "Ajustes";
 
 const apiOrigin = (import.meta.env.VITE_API_URL ?? "https://api.pikidelivery.com").replace(/\/$/, "");
 
 const navigation: Array<{ label: View; icon: typeof LayoutDashboard }> = [
   { label: "Resumen", icon: LayoutDashboard },
-  { label: "Alta de comercio", icon: Store },
   { label: "Pedidos", icon: ClipboardList },
   { label: "PDA Cocina", icon: TabletSmartphone },
   { label: "Catálogo", icon: PackageOpen },
@@ -39,7 +36,6 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [apiToken, setApiToken] = useState(() => sessionStorage.getItem(`piki-${location.hostname}-api-token`) || "");
   const [authRequired, setAuthRequired] = useState(false);
-  const [publicOnboarding, setPublicOnboarding] = useState(false);
 
   function selectView(view: View) {
     if ((view === "Pedidos" || view === "PDA Cocina" || view === "Catálogo" || view === "Equipo" || view === "Ajustes") && !apiToken) setAuthRequired(true);
@@ -47,7 +43,7 @@ function App() {
     setMenuOpen(false);
   }
 
-  if (!apiToken || authRequired) return <main className="page-content">{publicOnboarding ? <PartnerOnboarding apiOrigin={apiOrigin} onComplete={() => { setPublicOnboarding(false); setActiveView("Resumen"); }} /> : <EmployeeAuthGate apiOrigin={apiOrigin} onStartOnboarding={() => { setAuthRequired(false); setPublicOnboarding(true); }} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); setPublicOnboarding(false); window.dispatchEvent(new Event("piki-authenticated")); }} />}</main>;
+  if (!apiToken || authRequired) return <main className="page-content"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); window.dispatchEvent(new Event("piki-authenticated")); }} /></main>;
 
   return (
     <div className={`app-shell ${pdaMode ? "pda-mode" : ""}`}>
@@ -109,7 +105,6 @@ function App() {
         </header>
 
         <section className="page-content">
-          {authRequired && <EmployeeAuthGate apiOrigin={apiOrigin} onStartOnboarding={() => { setAuthRequired(false); setActiveView("Alta de comercio"); }} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); window.dispatchEvent(new Event("piki-authenticated")); }} />}
           {activeView === "Resumen" && (
             <>
               <div className="page-heading">
@@ -122,14 +117,6 @@ function App() {
 
 
               <section className="empty-state-grid">
-                <article className="empty-card primary-empty">
-                  <div className="empty-card-top"><span>COMERCIOS</span><Store size={18} /></div>
-                  <h2>Empieza con tu primer comercio</h2>
-                  <p>Registra los datos de contacto del establecimiento. La solicitud se guarda en la API central y queda pendiente de revisión.</p>
-                  <button className="primary-button" type="button" onClick={() => setActiveView("Alta de comercio")}>
-                    Dar de alta un comercio <ChevronRight size={17} />
-                  </button>
-                </article>
                 <article className="empty-card">
                   <div className="empty-card-top"><span>PEDIDOS</span><ClipboardList size={18} /></div>
                   <h2>Sin pedidos operativos</h2>
@@ -139,18 +126,16 @@ function App() {
             </>
           )}
 
-          {activeView === "Alta de comercio" && <PartnerOnboarding apiOrigin={apiOrigin} />}
 
           {activeView === "Pedidos" && apiToken && <KitchenScreen apiOrigin={apiOrigin} token={apiToken} />}
           {activeView === "PDA Cocina" && apiToken && <KitchenScreen apiOrigin={apiOrigin} token={apiToken} pdaMode />}
           {activeView === "Catálogo" && apiToken && <MenuEditor apiOrigin={apiOrigin} token={apiToken} />}
-          {activeView !== "Resumen" && activeView !== "Alta de comercio" && activeView !== "Pedidos" && activeView !== "Catálogo" && (
+          {activeView !== "Resumen" && activeView !== "Pedidos" && activeView !== "Catálogo" && (
             <section className="feature-empty">
               <div className="feature-icon"><PackageOpen size={26} /></div>
               <p className="eyebrow">{activeView.toUpperCase()}</p>
               <h1>Esta área estará disponible al activar comercios.</h1>
-              <p>El panel ya está conectado a producción. Completa el alta de un comercio para continuar con la configuración operativa.</p>
-              <button className="primary-button" type="button" onClick={() => setActiveView("Alta de comercio")}>Ir al alta de comercio <ChevronRight size={17} /></button>
+              <p>El panel ya está conectado a producción. Las altas de comercios las gestiona el equipo comercial desde piki-admin.</p>
             </section>
           )}
         </section>
