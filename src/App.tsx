@@ -8,7 +8,6 @@ import {
   Menu,
   PackageOpen,
   Settings,
-  Users,
   X,
 } from "lucide-react";
 import "./App.css";
@@ -16,7 +15,7 @@ import EmployeeAuthGate from "./EmployeeAuthGate";
 import MenuEditor from "./MenuEditor";
 import KitchenScreen from "./KitchenScreen";
 
-type View = "Resumen" | "Pedidos" | "Catálogo" | "Equipo" | "Ajustes";
+type View = "Resumen" | "Pedidos" | "Catálogo" | "Ajustes";
 
 const apiOrigin = (import.meta.env.VITE_API_URL ?? "https://api.pikidelivery.com").replace(/\/$/, "");
 
@@ -24,7 +23,6 @@ const navigation: Array<{ label: View; icon: typeof LayoutDashboard }> = [
   { label: "Resumen", icon: LayoutDashboard },
   { label: "Pedidos", icon: ClipboardList },
   { label: "Catálogo", icon: PackageOpen },
-  { label: "Equipo", icon: Users },
   { label: "Ajustes", icon: Settings },
 ];
 
@@ -35,7 +33,7 @@ function App() {
   const [authRequired, setAuthRequired] = useState(false);
 
   function selectView(view: View) {
-    if ((view === "Pedidos" || view === "Catálogo" || view === "Equipo" || view === "Ajustes") && !apiToken) setAuthRequired(true);
+    if ((view === "Pedidos" || view === "Catálogo" || view === "Ajustes") && !apiToken) setAuthRequired(true);
     setActiveView(view);
     setMenuOpen(false);
   }
