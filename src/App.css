@@ -114,10 +114,7 @@ h1 { margin: 0; max-width: 680px; font-size: clamp(34px,4vw,49px); letter-spacin
 /* PIKI PDA Cocina: targets táctiles grandes para tablets y terminales de establecimiento */
 .pda-mode .sidebar { display: none; }
 .pda-mode .main-content { margin-left: 0; width: 100%; }
-.pda-mode .page-content { width: min(1280px, calc(100% - 48px)); padding-top: 34px; }
-.pda-kitchen .table-heading h1 { font-size: clamp(34px, 5vw, 58px); }
-.pda-kitchen .lead { max-width: 760px; }
-.pda-order-grid { display: grid; gap: 18px; }
+.pda-mode .page-content { width: min(1280px, calc(100% - 48px)); padding-top: 34px; }.pda-order-grid { display: grid; gap: 18px; }
 .pda-order-card { align-items: stretch; padding: 24px; gap: 24px; }
 .pda-order-card strong { font-size: 20px; }
 .pda-order-card small { margin-top: 8px; }
