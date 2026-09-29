@@ -26,7 +26,7 @@ const labels: Record<string, string> = {
 
 const isCashOrder = (order: { cashDueAtDelivery?: boolean; paymentMethod?: string }) => Boolean(order.cashDueAtDelivery || order.paymentMethod === "cash");
 
-export default function KitchenScreen({ apiOrigin, token, pdaMode = false }: { apiOrigin: string; token: string; pdaMode?: boolean }) {
+export default function KitchenScreen({ apiOrigin, token }: { apiOrigin: string; token: string }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [message, setMessage] = useState("");
   const [busyOrderId, setBusyOrderId] = useState("");
@@ -102,10 +102,10 @@ export default function KitchenScreen({ apiOrigin, token, pdaMode = false }: { a
     window.setTimeout(() => window.print(), 40);
   }
 
-  return <section className={`application-table ${pdaMode ? "pda-kitchen" : ""}`} aria-label="Pantalla de cocina PIKI">
+  return <section className="application-table" aria-label="Pantalla de cocina PIKI">
     <div className="table-heading">
       <div>
-        <p className="eyebrow">{pdaMode ? "PIKI PDA · COCINA" : "OPERACIÓN DE COCINA"}</p>
+        <p className="eyebrow">OPERACIÓN DE COCINA</p>
         <h1>Pedidos en cocina</h1>
         <p className="lead">Los pedidos activos llegan al instante. Si son en efectivo, el Rider cobrará el importe exacto al entregar.</p>
       </div>
