@@ -68,7 +68,7 @@ export default function KitchenScreen({ apiOrigin, token }: { apiOrigin: string;
       if (event.type === "order.awaiting_partner_acceptance") {
         const orderId = String(event.payload.orderId || "");
         notifyPaidOrder(orderId);
-        setMessage(isCashOrder(event.payload) ? "Nuevo pedido en efectivo. El Rider cobrará el importe exacto al entregar." : "Nuevo pedido pagado. Acepta el pedido para detener la alarma y activar el reparto.");
+        setMessage(isCashOrder(event.payload) ? "Nuevo pedido en efectivo. El Rider cobrará el importe exacto al entregar." : "Nuevo pedido pagado. PIKI busca Rider en paralelo mientras empiezas la preparación.");
       }
       void load();
     },
@@ -87,7 +87,7 @@ export default function KitchenScreen({ apiOrigin, token }: { apiOrigin: string;
       if (response.ok && status === "accepted") resolveOrder(id);
       setMessage(response.ok
         ? status === "accepted"
-          ? "Pedido aceptado. La alarma se ha detenido y Fleet podrá asignar un rider."
+          ? "Pedido aceptado. La alarma se ha detenido; PIKI sigue coordinando el Rider mientras lo preparas."
           : "Pedido actualizado correctamente"
         : body.message || body.error || `No se pudo actualizar el pedido (HTTP ${response.status}).`);
       await load();
