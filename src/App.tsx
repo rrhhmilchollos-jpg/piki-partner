@@ -8,7 +8,6 @@ import {
   Menu,
   PackageOpen,
   Settings,
-  TabletSmartphone,
   Users,
   X,
 } from "lucide-react";
@@ -17,28 +16,26 @@ import EmployeeAuthGate from "./EmployeeAuthGate";
 import MenuEditor from "./MenuEditor";
 import KitchenScreen from "./KitchenScreen";
 
-type View = "Resumen" | "Pedidos" | "PDA Cocina" | "Catálogo" | "Equipo" | "Ajustes";
+type View = "Resumen" | "Pedidos" | "Catálogo" | "Equipo" | "Ajustes";
 
 const apiOrigin = (import.meta.env.VITE_API_URL ?? "https://api.pikidelivery.com").replace(/\/$/, "");
 
 const navigation: Array<{ label: View; icon: typeof LayoutDashboard }> = [
   { label: "Resumen", icon: LayoutDashboard },
   { label: "Pedidos", icon: ClipboardList },
-  { label: "PDA Cocina", icon: TabletSmartphone },
   { label: "Catálogo", icon: PackageOpen },
   { label: "Equipo", icon: Users },
   { label: "Ajustes", icon: Settings },
 ];
 
 function App() {
-  const pdaMode = new URLSearchParams(window.location.search).get("mode") === "pda";
-  const [activeView, setActiveView] = useState<View>(pdaMode ? "PDA Cocina" : "Resumen");
+  const [activeView, setActiveView] = useState<View>("Resumen");
   const [menuOpen, setMenuOpen] = useState(false);
   const [apiToken, setApiToken] = useState(() => sessionStorage.getItem(`piki-${location.hostname}-api-token`) || "");
   const [authRequired, setAuthRequired] = useState(false);
 
   function selectView(view: View) {
-    if ((view === "Pedidos" || view === "PDA Cocina" || view === "Catálogo" || view === "Equipo" || view === "Ajustes") && !apiToken) setAuthRequired(true);
+    if ((view === "Pedidos" || view === "Catálogo" || view === "Equipo" || view === "Ajustes") && !apiToken) setAuthRequired(true);
     setActiveView(view);
     setMenuOpen(false);
   }
@@ -46,7 +43,7 @@ function App() {
   if (!apiToken || authRequired) return <main className="page-content"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); window.dispatchEvent(new Event("piki-authenticated")); }} /></main>;
 
   return (
-    <div className={`app-shell ${pdaMode ? "pda-mode" : ""}`}>
+    <div className="app-shell">
       <aside className={`sidebar ${menuOpen ? "sidebar-open" : ""}`} aria-label="Navegación principal">
         <div className="brand-block">
           <div className="brand-mark">P</div>
@@ -128,7 +125,6 @@ function App() {
 
 
           {activeView === "Pedidos" && apiToken && <KitchenScreen apiOrigin={apiOrigin} token={apiToken} />}
-          {activeView === "PDA Cocina" && apiToken && <KitchenScreen apiOrigin={apiOrigin} token={apiToken} pdaMode />}
           {activeView === "Catálogo" && apiToken && <MenuEditor apiOrigin={apiOrigin} token={apiToken} />}
           {activeView !== "Resumen" && activeView !== "Pedidos" && activeView !== "Catálogo" && (
             <section className="feature-empty">
