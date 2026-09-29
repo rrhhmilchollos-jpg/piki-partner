@@ -68,7 +68,7 @@ export default function KitchenScreen({ apiOrigin, token }: { apiOrigin: string;
       if (event.type === "order.awaiting_partner_acceptance") {
         const orderId = String(event.payload.orderId || "");
         notifyPaidOrder(orderId);
-        setMessage(isCashOrder(event.payload) ? "Nuevo pedido en efectivo. El Rider cobrará el importe exacto al entregar." : "Nuevo pedido pagado. PIKI busca Rider en paralelo mientras empiezas la preparación.");
+        setMessage(isCashOrder(event.payload) ? "Nuevo pedido a contrarreembolso. No se cobra ahora; el Rider cobrará en efectivo al entregar." : "Nuevo pedido pagado online. PIKI busca Rider en paralelo mientras empiezas la preparación.");
       }
       void load();
     },
@@ -107,7 +107,7 @@ export default function KitchenScreen({ apiOrigin, token }: { apiOrigin: string;
       <div>
         <p className="eyebrow">OPERACIÓN DE COCINA</p>
         <h1>Pedidos en cocina</h1>
-        <p className="lead">Los pedidos activos llegan al instante. Si son en efectivo, el Rider cobrará el importe exacto al entregar.</p>
+        <p className="lead">Los pedidos activos llegan al instante. En los pedidos a contrarreembolso, el Rider cobra al cliente al entregar; el Partner no gestiona el efectivo.</p>
       </div>
       <button className="secondary-button" onClick={() => void load()}>Actualizar</button>
     </div>
@@ -118,7 +118,7 @@ export default function KitchenScreen({ apiOrigin, token }: { apiOrigin: string;
         <div>
           <strong>Pedido {order.publicCode || order._id}</strong>
           <span className={`kitchen-status status-${order.status}`}>{labels[order.status] || order.status}</span>
-          <small>{new Date(order.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} · {order.deliveryAddress || "Dirección disponible"}</small><small>{isCashOrder(order) ? `EFECTIVO · cobra Rider ${(Number(order.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}` : "Pago online confirmado"}</small>
+          <small>{new Date(order.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} · {order.deliveryAddress || "Dirección disponible"}</small><small>{isCashOrder(order) ? `CONTRARREEMBOLSO · cobra el Rider al entregar ${(Number(order.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}` : "PAGO ONLINE CONFIRMADO"}</small>
           <ul>{(order.items || []).map((item, index) => <li key={`${order._id}-${index}`}>{item.quantity || 1} × {item.name || "Producto"}</li>)}</ul>
           {order.status === "ready_for_pickup" && order.pickupQrUrl && <div className="pickup-verification" aria-label="Código único del pedido para autorizar la recogida del rider"><div><strong>Entrega al rider · {order.publicCode || "Pedido"}</strong><span>QR del pedido · muéstralo al rider</span><b>PIN de recogida: {order.pickupPin || "—"}</b><small>Este código pertenece solo a este pedido.</small></div><img src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=4&data=${encodeURIComponent(order.pickupQrUrl)}`} alt={`QR del pedido ${order.publicCode || ""}`} /></div>}
         </div>

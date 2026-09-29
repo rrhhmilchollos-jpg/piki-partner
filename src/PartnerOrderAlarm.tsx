@@ -116,7 +116,7 @@ export function PartnerOrderAlarmBanner({ count, audioReady, onEnableAudio }: {
 }) {
   if (!count) return null;
   return <div className="status-pill" role="alert" aria-live="assertive">
-    <strong>Alarma activa:</strong> hay {count} pedido{count === 1 ? "" : "s"} nuevo{count === 1 ? "" : "s"} esperando aceptación. Si es efectivo, el Rider cobrará en la entrega.
+    <strong>Alarma activa:</strong> hay {count} pedido{count === 1 ? "" : "s"} nuevo{count === 1 ? "" : "s"} esperando aceptación. Si es a contrarreembolso, el Rider cobrará al cliente al entregar.
     {!audioReady && <button className="secondary-button" type="button" onClick={onEnableAudio} style={{ marginLeft: "10px" }}>Activar sonido</button>}
   </div>;
 }
