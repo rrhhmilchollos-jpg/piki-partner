@@ -5,12 +5,14 @@ import {
   ChevronRight,
   ClipboardList,
   LayoutDashboard,
+  LogOut,
   Menu,
   PackageOpen,
   Settings,
   X,
 } from "lucide-react";
 import "./App.css";
+import "./PartnerLogout.css";
 import EmployeeAuthGate from "./EmployeeAuthGate";
 import MenuEditor from "./MenuEditor";
 import KitchenScreen from "./KitchenScreen";
@@ -18,6 +20,8 @@ import KitchenScreen from "./KitchenScreen";
 type View = "Resumen" | "Pedidos" | "Catálogo" | "Ajustes";
 
 const apiOrigin = (import.meta.env.VITE_API_URL ?? "https://api.pikidelivery.com").replace(/\/$/, "");
+const tokenStorageKey = `piki-${location.hostname}-api-token`;
+function persistEmployeeToken(token: string, rememberDevice: boolean) { if (rememberDevice) localStorage.setItem(tokenStorageKey, token); else localStorage.removeItem(tokenStorageKey); sessionStorage.setItem(tokenStorageKey, token); }
 
 const navigation: Array<{ label: View; icon: typeof LayoutDashboard }> = [
   { label: "Resumen", icon: LayoutDashboard },
@@ -29,7 +33,7 @@ const navigation: Array<{ label: View; icon: typeof LayoutDashboard }> = [
 function App() {
   const [activeView, setActiveView] = useState<View>("Resumen");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [apiToken, setApiToken] = useState(() => sessionStorage.getItem(`piki-${location.hostname}-api-token`) || "");
+  const [apiToken, setApiToken] = useState(() => localStorage.getItem(tokenStorageKey) || sessionStorage.getItem(tokenStorageKey) || "");
   const [authRequired, setAuthRequired] = useState(false);
 
   function selectView(view: View) {
@@ -38,7 +42,18 @@ function App() {
     setMenuOpen(false);
   }
 
-  if (!apiToken || authRequired) return <main className="page-content"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); window.dispatchEvent(new Event("piki-authenticated")); }} /></main>;
+  async function logout() {
+    try {
+      await fetch(`${apiOrigin}/api/v1/auth/employee/logout`, { method: "POST", headers: { Authorization: `Bearer ${apiToken}` } });
+    } catch { /* El token local se elimina aunque la API no responda. */ }
+    localStorage.removeItem(tokenStorageKey);
+    sessionStorage.removeItem(tokenStorageKey);
+    setApiToken("");
+    setAuthRequired(false);
+    setActiveView("Resumen");
+  }
+
+  if (!apiToken || authRequired) return <main className="page-content"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token, rememberDevice) => { persistEmployeeToken(token, rememberDevice); setApiToken(token); setAuthRequired(false); window.dispatchEvent(new Event("piki-authenticated")); }} /></main>;
 
   return (
     <div className="app-shell">
@@ -95,6 +110,7 @@ function App() {
             <button className="icon-button" type="button" aria-label="Notificaciones" onClick={() => setActiveView("Pedidos")}>
               <Bell size={19} />
             </button>
+            <button className="secondary-button partner-logout-button" type="button" aria-label="Cerrar sesión" title="Cerrar sesión" onClick={() => void logout()}><LogOut size={16} /><span className="partner-logout-label">Cerrar sesión</span></button>
             <div className="user-avatar" aria-label="Usuario de PIKI">P</div>
           </div>
         </header>

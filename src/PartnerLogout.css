@@ -1,0 +1,6 @@
+.partner-logout-button { min-height: 40px; display: inline-flex; align-items: center; gap: 7px; padding: 8px 11px; }
+.partner-logout-label { display: inline; }
+@media (max-width: 620px) {
+  .partner-logout-button { min-width: 40px; justify-content: center; padding: 8px; }
+  .partner-logout-label { display: none; }
+}
