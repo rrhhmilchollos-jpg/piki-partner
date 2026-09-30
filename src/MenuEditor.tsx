@@ -59,9 +59,11 @@ const money = new Intl.NumberFormat("es-ES", {
 export default function MenuEditor({
   apiOrigin,
   token,
+  onUnauthorized,
 }: {
   apiOrigin: string;
   token: string;
+  onUnauthorized: () => void;
 }) {
   const [items, setItems] = useState<Item[]>([]);
   const [draft, setDraft] = useState<Item | null>(null);
@@ -148,7 +150,7 @@ export default function MenuEditor({
       const response = await fetch(`${apiOrigin}/api/v1/partners/menu`, {
         headers,
       });
-      if (!response.ok) throw new Error("No se pudo cargar la carta");
+      if (!response.ok) { if (response.status === 401 || response.status === 403) { onUnauthorized(); return; } throw new Error("No se pudo cargar la carta"); }
       setItems(((await response.json()) as { menu?: Item[] }).menu || []);
     } catch (error) {
       setMessage(
@@ -199,7 +201,7 @@ export default function MenuEditor({
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({ items: next }),
       });
-      if (!response.ok) throw new Error("No se pudo eliminar el producto");
+      if (!response.ok) { if (response.status === 401 || response.status === 403) { onUnauthorized(); return; } throw new Error("No se pudo eliminar el producto"); }
       setItems(next);
       setMessage("Producto eliminado.");
       if (draft?.id === id) setDraft(null);

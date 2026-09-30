@@ -26,7 +26,7 @@ const labels: Record<string, string> = {
 
 const isCashOrder = (order: { cashDueAtDelivery?: boolean; paymentMethod?: string }) => Boolean(order.cashDueAtDelivery || order.paymentMethod === "cash");
 
-export default function KitchenScreen({ apiOrigin, token }: { apiOrigin: string; token: string }) {
+export default function KitchenScreen({ apiOrigin, token, onUnauthorized }: { apiOrigin: string; token: string; onUnauthorized: () => void }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [message, setMessage] = useState("");
   const [busyOrderId, setBusyOrderId] = useState("");
@@ -44,14 +44,14 @@ export default function KitchenScreen({ apiOrigin, token }: { apiOrigin: string;
   const load = useCallback(async () => {
     try {
       const response = await fetch(`${apiOrigin}/api/v1/partners/kitchen/orders`, { headers });
-      if (!response.ok) { setMessage(response.status === 401 || response.status === 403 ? "Sesión de partner no autorizada. Vuelve a iniciar sesión." : `No se pudo sincronizar cocina (HTTP ${response.status}).`); return; }
+      if (!response.ok) { if (response.status === 401 || response.status === 403) { onUnauthorized(); return; } setMessage(`No se pudo sincronizar cocina (HTTP ${response.status}).`); return; }
       const next = ((await response.json()).orders || []) as Order[];
       setOrders(next);
       reconcileKitchenOrders(next);
     } catch {
       setMessage("No hay conexión con la API. Conserva la última lista hasta recuperar sincronización.");
     }
-  }, [apiOrigin, headers, reconcileKitchenOrders]);
+  }, [apiOrigin, headers, onUnauthorized, reconcileKitchenOrders]);
 
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect
