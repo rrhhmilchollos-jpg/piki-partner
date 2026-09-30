@@ -1,5 +1,6 @@
 /* oxlint-disable react/preserve-manual-memoization -- headers/load are intentionally stable for API effects. */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getApiErrorMessage } from "./api";
 import {
   Check,
   Copy,
@@ -113,12 +114,10 @@ export default function MenuEditor({
         }),
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok)
-        throw new Error(
-          body.error === "MENU_IMAGE_TOO_LARGE"
-            ? "La imagen supera el límite de 200 KB."
-            : body.error || "No se pudo subir la imagen",
-        );
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) { onUnauthorized(); return; }
+        throw new Error(body.error === "MENU_IMAGE_TOO_LARGE" ? "La imagen supera el límite de 200 KB." : await getApiErrorMessage(response, "No se pudo subir la imagen."));
+      }
       updateDraft({ image: body.asset.url });
       setMessage(`Imagen subida: ${body.asset.folderKey}`);
     } catch (error) {
@@ -150,7 +149,7 @@ export default function MenuEditor({
       const response = await fetch(`${apiOrigin}/api/v1/partners/menu`, {
         headers,
       });
-      if (!response.ok) { if (response.status === 401 || response.status === 403) { onUnauthorized(); return; } throw new Error("No se pudo cargar la carta"); }
+      if (!response.ok) { if (response.status === 401 || response.status === 403) { onUnauthorized(); return; } throw new Error(await getApiErrorMessage(response, "No se pudo cargar la carta.")); }
       setItems(((await response.json()) as { menu?: Item[] }).menu || []);
     } catch (error) {
       setMessage(
@@ -159,7 +158,7 @@ export default function MenuEditor({
     } finally {
       setLoading(false);
     }
-  }, [apiOrigin, headers]);
+  }, [apiOrigin, headers, onUnauthorized]);
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect
     void load();
@@ -178,8 +177,8 @@ export default function MenuEditor({
         body: JSON.stringify({ items: next }),
       });
       if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || "No se pudo guardar la carta");
+        if (response.status === 401 || response.status === 403) { onUnauthorized(); return; }
+        throw new Error(await getApiErrorMessage(response, "No se pudo guardar la carta."));
       }
       setItems(next);
       setDraft(null);
@@ -201,7 +200,7 @@ export default function MenuEditor({
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({ items: next }),
       });
-      if (!response.ok) { if (response.status === 401 || response.status === 403) { onUnauthorized(); return; } throw new Error("No se pudo eliminar el producto"); }
+      if (!response.ok) { if (response.status === 401 || response.status === 403) { onUnauthorized(); return; } throw new Error(await getApiErrorMessage(response, "No se pudo eliminar el producto.")); }
       setItems(next);
       setMessage("Producto eliminado.");
       if (draft?.id === id) setDraft(null);

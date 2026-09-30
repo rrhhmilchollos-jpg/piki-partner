@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Menu,
   PackageOpen,
-  Settings,
   X,
 } from "lucide-react";
 import "./App.css";
@@ -15,7 +14,7 @@ import EmployeeAuthGate from "./EmployeeAuthGate";
 import MenuEditor from "./MenuEditor";
 import KitchenScreen from "./KitchenScreen";
 
-type View = "Resumen" | "Pedidos" | "Catálogo" | "Ajustes";
+type View = "Resumen" | "Pedidos" | "Catálogo";
 
 const apiOrigin = (import.meta.env.VITE_API_URL ?? "https://api.pikidelivery.com").replace(/\/$/, "");
 
@@ -23,7 +22,6 @@ const navigation: Array<{ label: View; icon: typeof LayoutDashboard }> = [
   { label: "Resumen", icon: LayoutDashboard },
   { label: "Pedidos", icon: ClipboardList },
   { label: "Catálogo", icon: PackageOpen },
-  { label: "Ajustes", icon: Settings },
 ];
 
 function App() {
@@ -41,7 +39,7 @@ function App() {
   }
 
   useEffect(() => {
-    if (!apiToken) { setCheckingSession(false); return; }
+    if (!apiToken) return;
     let cancelled = false;
     void fetch(`${apiOrigin}/api/v1/auth/employee/me`, {
       headers: { Authorization: `Bearer ${apiToken}`, "X-PIKI-Surface": "partner" },
@@ -52,10 +50,10 @@ function App() {
       else setCheckingSession(false);
     }).catch(() => { if (!cancelled) setCheckingSession(false); });
     return () => { cancelled = true; };
-  }, [apiOrigin, apiToken]);
+  }, [apiToken]);
 
   function selectView(view: View) {
-    if ((view === "Pedidos" || view === "Catálogo" || view === "Ajustes") && !apiToken) setAuthRequired(true);
+    if ((view === "Pedidos" || view === "Catálogo") && !apiToken) setAuthRequired(true);
     setActiveView(view);
     setMenuOpen(false);
   }
@@ -130,7 +128,7 @@ function App() {
                 <div>
                   <p className="eyebrow">PLATAFORMA DE DELIVERY</p>
                   <h1>Buenas decisiones, desde el primer pedido.</h1>
-                  <p className="lead">El panel está conectado al núcleo de producción de PIKI. Da de alta comercios y prepara la operativa real.</p>
+                  <p className="lead">El panel está conectado al núcleo de producción de PIKI. Gestiona la carta y prepara los pedidos del comercio asignado.</p>
                 </div>
               </div>
 
@@ -139,7 +137,7 @@ function App() {
                 <article className="empty-card">
                   <div className="empty-card-top"><span>PEDIDOS</span><ClipboardList size={18} /></div>
                   <h2>Sin pedidos operativos</h2>
-                  <p>Los pedidos aparecerán aquí cuando los comercios aprobados publiquen su catálogo y reciban su primera venta.</p>
+                  <p>Los pedidos del comercio asignado aparecerán aquí cuando haya ventas disponibles.</p>
                 </article>
               </section>
             </>
@@ -148,14 +146,7 @@ function App() {
 
           {activeView === "Pedidos" && apiToken && <KitchenScreen apiOrigin={apiOrigin} token={apiToken} onUnauthorized={clearSession} />}
           {activeView === "Catálogo" && apiToken && <MenuEditor apiOrigin={apiOrigin} token={apiToken} onUnauthorized={clearSession} />}
-          {activeView !== "Resumen" && activeView !== "Pedidos" && activeView !== "Catálogo" && (
-            <section className="feature-empty">
-              <div className="feature-icon"><PackageOpen size={26} /></div>
-              <p className="eyebrow">{activeView.toUpperCase()}</p>
-              <h1>Esta área estará disponible al activar comercios.</h1>
-              <p>El panel ya está conectado a producción. Las altas de comercios las gestiona el equipo comercial desde piki-admin.</p>
-            </section>
-          )}
+
         </section>
       </main>
     </div>

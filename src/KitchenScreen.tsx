@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Printer } from "lucide-react";
 import { PartnerOrderAlarmBanner, type PartnerKitchenOrder, usePartnerOrderAlarm } from "./PartnerOrderAlarm";
 import { connectPikiRealtime } from "./realtime";
+import { getApiErrorMessage } from "./api";
 
 type Order = PartnerKitchenOrder & {
 	publicCode?: string;
@@ -44,7 +45,7 @@ export default function KitchenScreen({ apiOrigin, token, onUnauthorized }: { ap
   const load = useCallback(async () => {
     try {
       const response = await fetch(`${apiOrigin}/api/v1/partners/kitchen/orders`, { headers });
-      if (!response.ok) { if (response.status === 401 || response.status === 403) { onUnauthorized(); return; } setMessage(`No se pudo sincronizar cocina (HTTP ${response.status}).`); return; }
+      if (!response.ok) { if (response.status === 401 || response.status === 403) { onUnauthorized(); return; } setMessage(await getApiErrorMessage(response, "No se pudo sincronizar cocina.")); return; }
       const next = ((await response.json()).orders || []) as Order[];
       setOrders(next);
       reconcileKitchenOrders(next);
@@ -83,13 +84,15 @@ export default function KitchenScreen({ apiOrigin, token, onUnauthorized }: { ap
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      const body = await response.json().catch(() => ({})) as { error?: string; message?: string };
-      if (response.ok && status === "accepted") resolveOrder(id);
-      setMessage(response.ok
-        ? status === "accepted"
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) { onUnauthorized(); return; }
+        setMessage(await getApiErrorMessage(response, "No se pudo actualizar el pedido."));
+      } else {
+        if (status === "accepted") resolveOrder(id);
+        setMessage(status === "accepted"
           ? "Pedido aceptado. La alarma se ha detenido; PIKI sigue coordinando el Rider mientras lo preparas."
-          : "Pedido actualizado correctamente"
-        : body.message || body.error || `No se pudo actualizar el pedido (HTTP ${response.status}).`);
+          : "Pedido actualizado correctamente");
+      }
       await load();
     } catch {
       setMessage("Error de red actualizando el pedido. Revisa la conexión antes de repetir.");

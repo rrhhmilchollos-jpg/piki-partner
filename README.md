@@ -11,9 +11,15 @@ Panel web de operaciones para los comercios asociados a **PIKI**. Este repositor
 | Panel temporal de Render | `https://piki-partners.onrender.com` |
 | Dominio objetivo | `https://partners.piki.es` |
 
-## Funcionalidad inicial
+## Funcionalidad
 
-El panel verifica en tiempo real la disponibilidad de la API y PostgreSQL mediante `/ready`. También permite enviar solicitudes de alta de comercios al endpoint `POST /api/v1/partners/onboarding`.
+El panel verifica en tiempo real la disponibilidad de la API mediante `/ready`, autentica al empleado Partner y permite gestionar exclusivamente el comercio asignado:
+
+- **Resumen**: estado del comercio y acceso a la operación.
+- **Pedidos**: pantalla de cocina, aceptación, preparación, incidencias e impresión de tickets.
+- **Catálogo**: edición de productos, modificadores e imágenes del menú.
+
+Las altas de comercios y la administración global se gestionan desde `piki-admin`, no desde este panel.
 
 ## Desarrollo local
 
