@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bell,
   Building2,
@@ -31,12 +31,36 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [apiToken, setApiToken] = useState(() => sessionStorage.getItem(`piki-${location.hostname}-api-token`) || "");
   const [authRequired, setAuthRequired] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(Boolean(apiToken));
+
+  function clearSession() {
+    sessionStorage.removeItem(`piki-${location.hostname}-api-token`);
+    setApiToken("");
+    setAuthRequired(true);
+    setCheckingSession(false);
+  }
+
+  useEffect(() => {
+    if (!apiToken) { setCheckingSession(false); return; }
+    let cancelled = false;
+    void fetch(`${apiOrigin}/api/v1/auth/employee/me`, {
+      headers: { Authorization: `Bearer ${apiToken}`, "X-PIKI-Surface": "partner" },
+      cache: "no-store",
+    }).then((response) => {
+      if (cancelled) return;
+      if (!response.ok) clearSession();
+      else setCheckingSession(false);
+    }).catch(() => { if (!cancelled) setCheckingSession(false); });
+    return () => { cancelled = true; };
+  }, [apiOrigin, apiToken]);
 
   function selectView(view: View) {
     if ((view === "Pedidos" || view === "Catálogo" || view === "Ajustes") && !apiToken) setAuthRequired(true);
     setActiveView(view);
     setMenuOpen(false);
   }
+
+  if (checkingSession) return <main className="page-content"><p className="status-pill">Comprobando sesión de partner…</p></main>;
 
   if (!apiToken || authRequired) return <main className="page-content"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); window.dispatchEvent(new Event("piki-authenticated")); }} /></main>;
 
@@ -122,8 +146,8 @@ function App() {
           )}
 
 
-          {activeView === "Pedidos" && apiToken && <KitchenScreen apiOrigin={apiOrigin} token={apiToken} />}
-          {activeView === "Catálogo" && apiToken && <MenuEditor apiOrigin={apiOrigin} token={apiToken} />}
+          {activeView === "Pedidos" && apiToken && <KitchenScreen apiOrigin={apiOrigin} token={apiToken} onUnauthorized={clearSession} />}
+          {activeView === "Catálogo" && apiToken && <MenuEditor apiOrigin={apiOrigin} token={apiToken} onUnauthorized={clearSession} />}
           {activeView !== "Resumen" && activeView !== "Pedidos" && activeView !== "Catálogo" && (
             <section className="feature-empty">
               <div className="feature-icon"><PackageOpen size={26} /></div>
