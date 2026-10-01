@@ -1,5 +1,11 @@
 {
   "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/piki-api/:path*",
+      "destination": "https://api.pikidelivery.com/:path*"
+    }
+  ],
   "headers": [
     {
       "source": "/release.json",
