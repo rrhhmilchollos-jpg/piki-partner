@@ -1,9 +1,9 @@
 {
   "id": "/",
-  "name": "PIKI Partners · PDA Cocina",
-  "short_name": "PIKI Cocina",
+  "name": "PIKI Partners",
+  "short_name": "PIKI Partners",
   "version": "0.2.6",
-  "description": "PDA de cocina PIKI para aceptar pedidos, preparar comandas y marcar recogidas.",
+  "description": "Aplicación PIKI Partners para gestionar pedidos, catálogo y operaciones del establecimiento.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -32,8 +32,8 @@
   ],
   "shortcuts": [
     {
-      "name": "Abrir cocina",
-      "short_name": "Cocina",
+      "name": "Abrir PIKI Partners",
+      "short_name": "Partners",
       "url": "/?mode=pda",
       "icons": [
         {
