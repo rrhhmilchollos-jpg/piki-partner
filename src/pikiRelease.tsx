@@ -45,7 +45,7 @@ async function registerWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) return null;
   try {
     const registration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
-    await registration.update();
+    try { await registration.update(); } catch { /* Un SW antiguo o una red móvil no debe bloquear la app. */ }
     return registration;
   } catch (error) {
     // The API policy remains authoritative. A stale browser registration must not
