@@ -30,7 +30,7 @@ test("service worker has a partner-scoped cache and bypasses API/auth/release ca
 test("release check is same-origin, no-store, and guards the partner surface", async () => {
   const releaseCode = await text("src/release.ts");
 
-  assert.match(releaseCode, /PARTNER_RELEASE_VERSION = "0\.2\.6"/);
+  assert.match(releaseCode, /PARTNER_RELEASE_VERSION = "0\.3\.0"/);
   assert.match(releaseCode, /fetch\("\/release\.json"/);
   assert.match(releaseCode, /cache: "no-store"/);
   assert.match(releaseCode, /credentials: "same-origin"/);
