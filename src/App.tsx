@@ -18,6 +18,24 @@ import KitchenScreen from "./KitchenScreen";
 type View = "Resumen" | "Pedidos" | "Catálogo" | "Ajustes";
 
 const apiOrigin = (import.meta.env.VITE_API_URL ?? "https://api.pikidelivery.com").replace(/\/$/, "");
+const partnerTokenKey = `piki-${location.hostname}-api-token`;
+
+function readPartnerToken(): string {
+  const persisted = localStorage.getItem(partnerTokenKey);
+  if (persisted) return persisted;
+  const legacy = sessionStorage.getItem(partnerTokenKey);
+  if (legacy) {
+    localStorage.setItem(partnerTokenKey, legacy);
+    sessionStorage.removeItem(partnerTokenKey);
+    return legacy;
+  }
+  return "";
+}
+
+function persistPartnerToken(token: string): void {
+  localStorage.setItem(partnerTokenKey, token);
+  sessionStorage.removeItem(partnerTokenKey);
+}
 
 const navigation: Array<{ label: View; icon: typeof LayoutDashboard }> = [
   { label: "Resumen", icon: LayoutDashboard },
@@ -29,12 +47,13 @@ const navigation: Array<{ label: View; icon: typeof LayoutDashboard }> = [
 function App() {
   const [activeView, setActiveView] = useState<View>("Resumen");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [apiToken, setApiToken] = useState(() => sessionStorage.getItem(`piki-${location.hostname}-api-token`) || "");
+  const [apiToken, setApiToken] = useState(readPartnerToken);
   const [authRequired, setAuthRequired] = useState(false);
   const [checkingSession, setCheckingSession] = useState(Boolean(apiToken));
 
   function clearSession() {
-    sessionStorage.removeItem(`piki-${location.hostname}-api-token`);
+    localStorage.removeItem(partnerTokenKey);
+    sessionStorage.removeItem(partnerTokenKey);
     setApiToken("");
     setAuthRequired(true);
     setCheckingSession(false);
@@ -62,7 +81,7 @@ function App() {
 
   if (checkingSession) return <main className="page-content"><p className="status-pill">Comprobando sesión de partner…</p></main>;
 
-  if (!apiToken || authRequired) return <main className="page-content"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token) => { sessionStorage.setItem(`piki-${location.hostname}-api-token`, token); setApiToken(token); setAuthRequired(false); window.dispatchEvent(new Event("piki-authenticated")); }} /></main>;
+  if (!apiToken || authRequired) return <main className="page-content"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(token) => { persistPartnerToken(token); setApiToken(token); setAuthRequired(false); window.dispatchEvent(new Event("piki-authenticated")); }} /></main>;
 
   return (
     <div className="app-shell">
