@@ -31,7 +31,8 @@ export default function PerformanceView({ token, locationId, canRead, onUnauthor
     setState("loading");
     try {
       const response = await fetch(`${apiOrigin}/api/v1/partners/metrics/overview?period=today`, { headers, cache: "no-store" });
-      if (response.status === 401 || response.status === 403) { onUnauthorized(); return; }
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (response.status === 403) { setMetrics({}); setState("unavailable"); return; }
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setMetrics(extractMetrics(await response.json()));
       setState("ready");
@@ -47,7 +48,7 @@ export default function PerformanceView({ token, locationId, canRead, onUnauthor
   ];
 
   return <section className="performance-workspace" aria-label="Rendimiento del local">
-    <header className="availability-heading"><div><p className="section-kicker">RESULTADOS DEL DÍA</p><h1>Rendimiento</h1><p>Una lectura rápida de la jornada, calculada con datos de PIKI.</p></div><button type="button" className="secondary-control" onClick={() => void load()}><RefreshCw size={17} />Actualizar</button></header>
+    <header className="availability-heading"><div><p className="section-kicker">RESULTADOS DEL DÍA</p><h1>Rendimiento</h1><p>Una lectura rápida de la jornada, calculada con datos de PIKI.</p></div><button type="button" className="secondary-control" disabled={!canRead} onClick={() => void load()}><RefreshCw size={17} />Actualizar</button></header>
     <div className="performance-hero"><div><TrendingUp size={25} /><span>HOY</span><strong>{metrics.trend == null ? "—" : `${metrics.trend >= 0 ? "+" : ""}${metrics.trend.toFixed(0)}%`}</strong><p>Variación de pedidos frente al periodo anterior.</p></div><BarChart3 size={92} aria-hidden="true" /></div>
     <div className="performance-grid">{cards.map((card) => <article key={card.label}><span>{card.label}</span><strong>{state === "loading" ? "…" : card.value}</strong><small>{card.hint}</small></article>)}</div>
     {state === "unavailable" && <aside className="metrics-unavailable"><CircleAlert size={20} /><div><strong>Aún no hay métricas sincronizadas para este local.</strong><p>La pantalla está lista para mostrar datos reales cuando el backend habilite el resumen `GET /api/v1/partners/metrics/overview`. No se muestran cifras de ejemplo.</p></div></aside>}

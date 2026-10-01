@@ -11,7 +11,6 @@ import { apiOrigin, displayRole, hasPermission, normalisePartnerProfile, partner
 
 type View = "orders" | "menu" | "performance";
 const tokenKey = `piki-${location.hostname}-api-token`;
-
 const navigation: Array<{ id: View; label: string; icon: typeof Bell }> = [
   { id: "orders", label: "Pedidos", icon: Bell },
   { id: "menu", label: "Disponibilidad", icon: PackageSearch },
@@ -21,7 +20,14 @@ const navigation: Array<{ id: View; label: string; icon: typeof Bell }> = [
 function storedToken(): string { return localStorage.getItem(tokenKey) || sessionStorage.getItem(tokenKey) || ""; }
 function saveToken(token: string): void { localStorage.setItem(tokenKey, token); sessionStorage.removeItem(tokenKey); }
 
-function StoreStatusControl({ token, location, enabled }: { token: string; location: PartnerLocation; enabled: boolean }) {
+function confirmedOpen(payload: unknown, fallback: boolean): boolean {
+  const data = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+  if (typeof data.isOpen === "boolean") return data.isOpen;
+  if (typeof data.open === "boolean") return data.open;
+  return typeof data.status === "string" ? data.status.toLowerCase() === "open" : fallback;
+}
+
+function StoreStatusControl({ token, location, enabled, onUnauthorized }: { token: string; location: PartnerLocation; enabled: boolean; onUnauthorized: () => void }) {
   const [open, setOpen] = useState(location.isOpen ?? true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -32,28 +38,41 @@ function StoreStatusControl({ token, location, enabled }: { token: string; locat
     if (!enabled || busy) return;
     const next = !open;
     setBusy(true);
-    setOpen(next);
+    setMessage("");
     try {
       const response = await fetch(`${apiOrigin}/api/v1/partners/store/status`, {
         method: "PATCH",
         headers: { ...partnerHeaders(token, location.id), "Content-Type": "application/json" },
         body: JSON.stringify({ status: next ? "open" : "paused" }),
       });
+      const payload = await response.json().catch(() => ({}));
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (response.status === 403) { setMessage("Este perfil no puede cambiar el estado del local."); return; }
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      setMessage(next ? "Local abierto" : "Local pausado");
+      const applied = confirmedOpen(payload, next);
+      setOpen(applied);
+      setMessage(applied ? "Local abierto y confirmado." : "Local pausado y confirmado.");
     } catch {
-      setOpen(!next);
-      setMessage("El estado no se pudo sincronizar. Reintenta cuando el API de disponibilidad esté activo.");
+      setMessage("El estado no se pudo sincronizar. El local conserva su último estado confirmado.");
     } finally { setBusy(false); }
   };
 
   return <div className={`store-control ${open ? "is-open" : "is-paused"}`}>
     <button type="button" role="switch" aria-checked={open} disabled={!enabled || busy} onClick={() => void toggle()}>
       <span className="store-toggle"><span /></span>
-      <span><b>{open ? "ABIERTO" : "PAUSADO"}</b><small>{busy ? "Guardando…" : open ? "Aceptando pedidos" : "No se reciben pedidos"}</small></span>
+      <span><b>{open ? "ABIERTO" : "PAUSADO"}</b><small>{busy ? "Confirmando…" : open ? "Aceptando pedidos" : "No se reciben pedidos"}</small></span>
     </button>
     {message && <p role="status">{message}</p>}
   </div>;
+}
+
+function MissingAssignment({ onLogout }: { onLogout: () => void }) {
+  return <main className="auth-page"><section className="orders-login-card">
+    <p className="section-kicker">ACCESO PENDIENTE</p>
+    <h2>No hay un local asignado</h2>
+    <p>Tu sesión es válida, pero PIKI no ha recibido una asignación de establecimiento y permisos para este usuario. Contacta con tu administrador o soporte antes de operar pedidos.</p>
+    <button type="button" className="login-submit" onClick={onLogout}>Cerrar sesión</button>
+  </section></main>;
 }
 
 function App() {
@@ -96,18 +115,28 @@ function App() {
 
   if (checkingSession) return <main className="auth-page"><p>Comprobando acceso seguro a PIKI Partner Orders…</p></main>;
   if (!token || !profile) return <main className="auth-page"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(nextToken) => { saveToken(nextToken); setToken(nextToken); setCheckingSession(true); window.dispatchEvent(new Event("piki-authenticated")); }} /></main>;
+  if (!profile.locations.length) return <MissingAssignment onLogout={clearSession} />;
 
   const location = profile.locations.find((item) => item.id === activeLocationId) ?? profile.locations[0];
-  const canStore = hasPermission(profile, "store:write");
-  const canOrders = hasPermission(profile, "orders:write") || hasPermission(profile, "orders:prepare");
-  const canCancel = hasPermission(profile, "orders:cancel");
-  const canMenu = hasPermission(profile, "menu:write");
-  const canMetrics = hasPermission(profile, "metrics:read");
+  const canStore = hasPermission(location, "store:write");
+  const canOrdersRead = hasPermission(location, "orders:read");
+  const canOrdersOperate = hasPermission(location, "orders:write") || hasPermission(location, "orders:prepare");
+  const canCancel = hasPermission(location, "orders:cancel");
+  const canMenuRead = hasPermission(location, "menu:read");
+  const canMenu = hasPermission(location, "menu:write");
+  const canMetrics = hasPermission(location, "metrics:read");
+  const availableNavigation = navigation.filter((item) => (
+    (item.id === "orders" && canOrdersRead)
+    || (item.id === "menu" && canMenuRead)
+    || (item.id === "performance" && canMetrics)
+  ));
+  const currentView = availableNavigation.some((item) => item.id === activeView) ? activeView : availableNavigation[0]?.id;
+  const role = location.roles[0] || "operador";
 
   return <div className="orders-app-shell">
     <aside className={`orders-sidebar ${menuOpen ? "is-visible" : ""}`} aria-label="Navegación de PIKI Partner Orders">
       <div className="orders-brand"><img src="/piki-rider-bee-192.png" alt="Rider abeja PIKI" /><div><strong>PIKI</strong><span>PARTNER ORDERS</span></div><button type="button" className="mobile-close" onClick={() => setMenuOpen(false)} aria-label="Cerrar menú"><X size={20} /></button></div>
-      <nav>{navigation.map(({ id, label, icon: Icon }) => <button type="button" key={id} className={activeView === id ? "active" : ""} onClick={() => { setActiveView(id); setMenuOpen(false); }}><Icon size={20} /><span>{label}</span></button>)}</nav>
+      <nav>{availableNavigation.map(({ id, label, icon: Icon }) => <button type="button" key={id} className={currentView === id ? "active" : ""} onClick={() => { setActiveView(id); setMenuOpen(false); }}><Icon size={20} /><span>{label}</span></button>)}</nav>
       <div className="sidebar-help"><CircleHelp size={18} /><span><b>¿Necesitas ayuda?</b><small>Soporte PIKI para Partners</small></span></div>
     </aside>
     {menuOpen && <button type="button" className="sidebar-scrim" aria-label="Cerrar menú" onClick={() => setMenuOpen(false)} />}
@@ -116,12 +145,13 @@ function App() {
       <header className="orders-topbar">
         <button type="button" className="mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Abrir menú"><Menu size={22} /></button>
         <div className="location-select"><Store size={18} /><div><span>LOCAL ACTIVO</span>{profile.locations.length > 1 ? <label><select value={location.id} onChange={(event) => setActiveLocationId(event.target.value)} aria-label="Seleccionar local">{profile.locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={16} /></label> : <strong>{location.name}</strong>}</div></div>
-        <div className="topbar-right"><StoreStatusControl token={token} location={location} enabled={canStore} /><div className="profile-chip"><span>{profile.name.slice(0, 1).toUpperCase()}</span><div><b>{profile.name}</b><small>{displayRole(profile.role)}</small></div><button type="button" onClick={clearSession} aria-label="Cerrar sesión"><LogOut size={17} /></button></div></div>
+        <div className="topbar-right"><StoreStatusControl token={token} location={location} enabled={canStore} onUnauthorized={clearSession} /><div className="profile-chip"><span>{profile.name.slice(0, 1).toUpperCase()}</span><div><b>{profile.name}</b><small>{displayRole(role)}</small></div><button type="button" onClick={clearSession} aria-label="Cerrar sesión"><LogOut size={17} /></button></div></div>
       </header>
       <div className="orders-page">
-        {activeView === "orders" && <OrdersBoard token={token} locationId={location.id} canOperate={canOrders} canCancel={canCancel} onUnauthorized={clearSession} />}
-        {activeView === "menu" && <MenuAvailability token={token} locationId={location.id} canEdit={canMenu} onUnauthorized={clearSession} />}
-        {activeView === "performance" && <PerformanceView token={token} locationId={location.id} canRead={canMetrics} onUnauthorized={clearSession} />}
+        {!currentView && <div className="orders-loading">Este perfil no tiene permisos operativos para el local seleccionado. Contacta con el administrador de tu cuenta PIKI.</div>}
+        {currentView === "orders" && <OrdersBoard token={token} locationId={location.id} canRead={canOrdersRead} canOperate={canOrdersOperate} canCancel={canCancel} onUnauthorized={clearSession} />}
+        {currentView === "menu" && <MenuAvailability token={token} locationId={location.id} canRead={canMenuRead} canEdit={canMenu} onUnauthorized={clearSession} />}
+        {currentView === "performance" && <PerformanceView token={token} locationId={location.id} canRead={canMetrics} onUnauthorized={clearSession} />}
       </div>
     </main>
   </div>;
