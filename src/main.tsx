@@ -3,7 +3,8 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
 import PikiSplash from "./PikiSplash";
-import { PikiReleaseGate, installPikiReleaseHeaders } from "./pikiRelease";
+import { PikiReleaseGate } from "./pikiRelease";
+import { installPikiReleaseHeaders } from "./releaseHeaders";
 
 installPikiReleaseHeaders();
 createRoot(document.getElementById("root")!).render(
