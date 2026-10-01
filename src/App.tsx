@@ -6,6 +6,7 @@ import MenuAvailability from "./MenuAvailability";
 import OrdersBoard from "./OrdersBoard";
 import PerformanceView from "./PerformanceView";
 import { apiOrigin, displayRole, hasPermission, normalisePartnerProfile, partnerHeaders, type PartnerLocation, type PartnerProfile } from "./partnerApi";
+import { partnerSessionIssue, shouldClearPartnerSession } from "./sessionRecovery";
 
 /* oxlint-disable react/set-state-in-effect -- effects reconcile authenticated profile and active location. */
 
@@ -75,11 +76,23 @@ function MissingAssignment({ onLogout }: { onLogout: () => void }) {
   </section></main>;
 }
 
+function SessionRecovery({ message, onRetry, onLogout }: { message: string; onRetry: () => void; onLogout: () => void }) {
+  return <main className="auth-page"><section className="orders-login-card">
+    <p className="section-kicker">CONEXIÓN PENDIENTE</p>
+    <h2>Conservamos tu sesión</h2>
+    <p>{message}</p>
+    <button type="button" className="login-submit" onClick={onRetry}>Reintentar conexión</button>
+    <button type="button" className="link-button" onClick={onLogout}>Cerrar sesión en este dispositivo</button>
+  </section></main>;
+}
+
 function App() {
   const [token, setToken] = useState(storedToken);
   const [profile, setProfile] = useState<PartnerProfile | null>(null);
   const [activeLocationId, setActiveLocationId] = useState("");
   const [checkingSession, setCheckingSession] = useState(Boolean(token));
+  const [sessionIssue, setSessionIssue] = useState("");
+  const [sessionRetry, setSessionRetry] = useState(0);
   const [activeView, setActiveView] = useState<View>("orders");
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -90,6 +103,13 @@ function App() {
     setProfile(null);
     setActiveLocationId("");
     setCheckingSession(false);
+    setSessionIssue("");
+  };
+
+  const retrySession = () => {
+    setSessionIssue("");
+    setCheckingSession(true);
+    setSessionRetry((current) => current + 1);
   };
 
   useEffect(() => {
@@ -98,22 +118,30 @@ function App() {
     const validate = async () => {
       try {
         const response = await fetch(`${apiOrigin}/api/v1/auth/employee/me`, { headers: partnerHeaders(token), cache: "no-store" });
-        if (!response.ok) { if (!cancelled) clearSession(); return; }
+        if (!response.ok) {
+          if (!cancelled) {
+            if (shouldClearPartnerSession(response.status)) clearSession();
+            else { setSessionIssue(partnerSessionIssue(response.status)); setCheckingSession(false); }
+          }
+          return;
+        }
         const next = normalisePartnerProfile(await response.json());
         if (!cancelled) {
           setProfile(next);
           setActiveLocationId((current) => next.locations.some((location) => location.id === current) ? current : next.locations[0]?.id || "");
           setCheckingSession(false);
+          setSessionIssue("");
         }
       } catch {
-        if (!cancelled) setCheckingSession(false);
+        if (!cancelled) { setSessionIssue(partnerSessionIssue()); setCheckingSession(false); }
       }
     };
     void validate();
     return () => { cancelled = true; };
-  }, [token]);
+  }, [token, sessionRetry]);
 
   if (checkingSession) return <main className="auth-page"><p>Comprobando acceso seguro a PIKI Partner Orders…</p></main>;
+  if (token && !profile && sessionIssue) return <SessionRecovery message={sessionIssue} onRetry={retrySession} onLogout={clearSession} />;
   if (!token || !profile) return <main className="auth-page"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(nextToken) => { saveToken(nextToken); setToken(nextToken); setCheckingSession(true); window.dispatchEvent(new Event("piki-authenticated")); }} /></main>;
   if (!profile.locations.length) return <MissingAssignment onLogout={clearSession} />;
 
