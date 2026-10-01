@@ -1,15 +1,15 @@
 {
   "id": "/",
-  "name": "PIKI Partners",
-  "short_name": "PIKI Partners",
-  "version": "0.2.6",
-  "description": "Aplicación PIKI Partners para gestionar pedidos, catálogo y operaciones del establecimiento.",
+  "name": "PIKI Partner Orders",
+  "short_name": "PIKI Orders",
+  "version": "0.3.0",
+  "description": "Aplicación operativa de PIKI para pedidos, disponibilidad y rendimiento del establecimiento.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#f5f7fb",
-  "theme_color": "#c9ff60",
+  "orientation": "any",
+  "background_color": "#ffd400",
+  "theme_color": "#ffd400",
   "lang": "es-ES",
   "categories": [
     "business",
@@ -18,13 +18,13 @@
   ],
   "icons": [
     {
-      "src": "/piki-icon-192.png",
+      "src": "/piki-rider-bee-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/piki-icon-512.png",
+      "src": "/piki-rider-bee-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -32,12 +32,12 @@
   ],
   "shortcuts": [
     {
-      "name": "Abrir PIKI Partners",
-      "short_name": "Partners",
-      "url": "/?mode=pda",
+      "name": "Ver pedidos",
+      "short_name": "Pedidos",
+      "url": "/",
       "icons": [
         {
-          "src": "/piki-icon.png",
+          "src": "/piki-rider-bee-192.png",
           "sizes": "192x192",
           "type": "image/png"
         }
