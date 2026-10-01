@@ -20,7 +20,7 @@ type MenuItem = {
 
 const money = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
 
-export default function MenuAvailability({ token, locationId, canEdit, onUnauthorized }: { token: string; locationId?: string; canEdit: boolean; onUnauthorized: () => void }) {
+export default function MenuAvailability({ token, locationId, canRead, canEdit, onUnauthorized }: { token: string; locationId?: string; canRead: boolean; canEdit: boolean; onUnauthorized: () => void }) {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [filter, setFilter] = useState("Todos");
   const [query, setQuery] = useState("");
@@ -30,10 +30,17 @@ export default function MenuAvailability({ token, locationId, canEdit, onUnautho
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
 
   const load = useCallback(async () => {
+    if (!canRead) {
+      setItems([]);
+      setMessage("Este perfil no tiene permiso para consultar la carta de este local.");
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const response = await fetch(`${apiOrigin}/api/v1/partners/menu`, { headers, cache: "no-store" });
-      if (response.status === 401 || response.status === 403) { onUnauthorized(); return; }
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (response.status === 403) { setItems([]); setMessage("No tienes permiso para consultar la carta de este local."); return; }
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json() as { menu?: MenuItem[] };
       setItems(data.menu ?? []);
@@ -41,7 +48,7 @@ export default function MenuAvailability({ token, locationId, canEdit, onUnautho
     } catch (error) {
       setMessage(error instanceof Error ? `No se ha podido cargar la carta (${error.message}).` : "No se ha podido cargar la carta.");
     } finally { setLoading(false); }
-  }, [headers, onUnauthorized]);
+  }, [canRead, headers, onUnauthorized]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -50,7 +57,7 @@ export default function MenuAvailability({ token, locationId, canEdit, onUnautho
   const available = items.filter((item) => item.available).length;
 
   const toggle = async (item: MenuItem) => {
-    if (!canEdit || saving) return;
+    if (!canRead || !canEdit || saving) return;
     const next = items.map((candidate) => candidate.id === item.id ? { ...candidate, available: !candidate.available } : candidate);
     setSaving(item.id);
     setItems(next);
@@ -60,7 +67,8 @@ export default function MenuAvailability({ token, locationId, canEdit, onUnautho
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({ items: next }),
       });
-      if (response.status === 401 || response.status === 403) { onUnauthorized(); return; }
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (response.status === 403) { setItems(items); setMessage("No tienes permiso para modificar la carta de este local."); return; }
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setMessage(`${item.name} está ${item.available ? "pausado" : "disponible"}.`);
     } catch (error) {

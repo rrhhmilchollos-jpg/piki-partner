@@ -59,12 +59,14 @@ function money(cents?: number): string {
 export default function OrdersBoard({
   token,
   locationId,
+  canRead,
   canOperate,
   canCancel,
   onUnauthorized,
 }: {
   token: string;
   locationId?: string;
+  canRead: boolean;
   canOperate: boolean;
   canCancel: boolean;
   onUnauthorized: () => void;
@@ -79,9 +81,20 @@ export default function OrdersBoard({
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
 
   const load = useCallback(async () => {
+    if (!canRead) {
+      setOrders([]);
+      setMessage("Este perfil no tiene permiso para consultar pedidos de este local.");
+      setLoading(false);
+      return;
+    }
     try {
       const response = await fetch(`${apiOrigin}/api/v1/partners/kitchen/orders`, { headers, cache: "no-store" });
-      if (response.status === 401 || response.status === 403) { onUnauthorized(); return; }
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (response.status === 403) {
+        setOrders([]);
+        setMessage("No tienes permiso para consultar pedidos de este local.");
+        return;
+      }
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = await response.json() as { orders?: PartnerOrder[] };
       const next = payload.orders ?? [];
@@ -95,7 +108,7 @@ export default function OrdersBoard({
     } finally {
       setLoading(false);
     }
-  }, [headers, onUnauthorized, reconcileKitchenOrders]);
+  }, [canRead, headers, onUnauthorized, reconcileKitchenOrders]);
 
   useEffect(() => {
     void load();
@@ -104,25 +117,28 @@ export default function OrdersBoard({
     return () => { window.clearInterval(polling); window.clearInterval(ticker); };
   }, [load]);
 
-  useEffect(() => connectPikiRealtime({
-    apiOrigin,
-    token,
-    locationId,
-    surface: "partner",
-    onState: setConnected,
-    onEvent: (event) => {
-      if (event.type === "order.awaiting_partner_acceptance") {
-        notifyPaidOrder(String(event.payload.orderId ?? ""));
-        setMessage(isCashOrder(event.payload as PartnerOrder)
-          ? "Nuevo pedido contra reembolso: el rider cobrará al entregar."
-          : "Nuevo pedido recibido. PIKI ya coordina el rider mientras lo preparas.");
-      }
-      void load();
-    },
-  }), [locationId, load, notifyPaidOrder, token]);
+  useEffect(() => {
+    if (!canRead) return undefined;
+    return connectPikiRealtime({
+      apiOrigin,
+      token,
+      locationId,
+      surface: "partner",
+      onState: setConnected,
+      onEvent: (event) => {
+        if (event.type === "order.awaiting_partner_acceptance") {
+          notifyPaidOrder(String(event.payload.orderId ?? ""));
+          setMessage(isCashOrder(event.payload as PartnerOrder)
+            ? "Nuevo pedido contra reembolso: el rider cobrará al entregar."
+            : "Nuevo pedido recibido. PIKI ya coordina el rider mientras lo preparas.");
+        }
+        void load();
+      },
+    });
+  }, [canRead, locationId, load, notifyPaidOrder, token]);
 
   const move = async (order: PartnerOrder, status: OrderStatus | "cancelled") => {
-    if (busyOrderId || !canOperate) return;
+    if (busyOrderId || !canRead || !canOperate) return;
     setBusyOrderId(order._id);
     try {
       const response = await fetch(`${apiOrigin}/api/v1/partners/kitchen/orders/${order._id}/status`, {
@@ -131,7 +147,8 @@ export default function OrdersBoard({
         body: JSON.stringify({ status }),
       });
       const payload = await response.json().catch(() => ({})) as { error?: string; message?: string };
-      if (response.status === 401 || response.status === 403) { onUnauthorized(); return; }
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (response.status === 403) { setMessage("No tienes permiso para realizar esta acción en el pedido."); return; }
       if (!response.ok) throw new Error(payload.message || payload.error || `HTTP ${response.status}`);
       if (status === "accepted") resolveOrder(order._id);
       setMessage(status === "accepted" ? "Pedido aceptado. Empieza la preparación cuando el equipo esté listo." : "Pedido actualizado correctamente.");
