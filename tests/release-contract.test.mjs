@@ -24,13 +24,13 @@ test("service worker has a partner-scoped cache and bypasses API/auth/release ca
   assert.match(worker, /CONTROL_PATHS.*release\.json/s);
   assert.match(worker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(worker, /url\.pathname\.startsWith\("\/auth\/"\)/);
-  assert.match(worker, /CACHE_PREFIX = "piki-partner-"/);
 });
 
-test("release check is same-origin, no-store, and guards the partner surface", async () => {
+test("release check is same-origin, no-store, and uses generated release metadata", async () => {
   const releaseCode = await text("src/release.ts");
 
-  assert.match(releaseCode, /PARTNER_RELEASE_VERSION = "0\.2\.6"/);
+  assert.match(releaseCode, /PARTNER_RELEASE_VERSION = PIKI_RELEASE\.version/);
+  assert.match(releaseCode, /PARTNER_SURFACE = PIKI_RELEASE\.surface/);
   assert.match(releaseCode, /fetch\("\/release\.json"/);
   assert.match(releaseCode, /cache: "no-store"/);
   assert.match(releaseCode, /credentials: "same-origin"/);

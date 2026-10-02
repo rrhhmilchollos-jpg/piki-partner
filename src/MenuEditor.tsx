@@ -4,12 +4,19 @@ import {
   Check,
   Copy,
   GripVertical,
+  FileText,
   Image as ImageIcon,
   Plus,
   Save,
+  ShieldCheck,
+  Upload,
+
   Trash2,
   X,
 } from "lucide-react";
+import "./MenuEditor.css";
+import { partnerHeaders } from "./partnerApi";
+import { bytesToBase64, MENU_IMAGE_ACCEPT, prepareMenuImage, sha256File, validateMenuFile, MAX_MENU_IMAGE_BYTES } from "./menuAsset";
 
 type Modifier = {
   id: string;
@@ -17,6 +24,17 @@ type Modifier = {
   price: number;
   required: boolean;
   options: string[];
+};
+type MenuAsset = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  kind: "menu_image" | "menu_file";
+  scanStatus?: string;
+  scanEngine?: string;
+  scannedAt?: string | null;
+  url: string;
 };
 type Item = {
   id: string;
@@ -59,10 +77,12 @@ const money = new Intl.NumberFormat("es-ES", {
 export default function MenuEditor({
   apiOrigin,
   token,
+  locationId,
   onUnauthorized,
 }: {
   apiOrigin: string;
   token: string;
+  locationId: string;
   onUnauthorized: () => void;
 }) {
   const [items, setItems] = useState<Item[]>([]);
@@ -71,68 +91,61 @@ export default function MenuEditor({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [assets, setAssets] = useState<MenuAsset[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(true);
   const [filter, setFilter] = useState("Todos");
-  const MAX_IMAGE_BYTES = 200 * 1024;
-  const ACCEPTED_IMAGE_TYPES = ["image/webp", "image/jpeg", "image/png"];
-  const encodeFile = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
-      reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
-      reader.readAsDataURL(file);
-    });
-  const uploadImage = async (file: File) => {
-    if (!draft) return;
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type))
-      return setMessage("Solo se permiten archivos .webp, .jpg, .jpeg o .png.");
-    if (file.size > MAX_IMAGE_BYTES)
-      return setMessage(
-        "La imagen supera el límite máximo de 200 KB por archivo.",
-      );
+  const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
+  const uploadAsset = async (file: File, kind: "menu_image" | "menu_file") => {
     setUploading(true);
-    setMessage("");
+    setMessage(kind === "menu_file" ? "Comprobando y analizando el PDF…" : "Optimizando y analizando la imagen…");
     try {
-      const contentBase64 = await encodeFile(file);
-      const bytes = Uint8Array.from(atob(contentBase64), (character) =>
-        character.charCodeAt(0),
-      );
-      const digestBuffer = await crypto.subtle.digest("SHA-256", bytes);
-      const sha256 = Array.from(new Uint8Array(digestBuffer))
-        .map((byte) => byte.toString(16).padStart(2, "0"))
-        .join("");
+      const preparedFile = kind === "menu_image" ? await prepareMenuImage(file) : file;
+      if (kind === "menu_file") validateMenuFile(preparedFile);
+      const bytes = new Uint8Array(await preparedFile.arrayBuffer());
+      const contentBase64 = bytesToBase64(bytes);
+      const sha256 = await sha256File(preparedFile);
       const response = await fetch(`${apiOrigin}/api/v1/partners/menu/assets`, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
-          fileName: file.name,
-          mimeType: file.type,
-          sizeBytes: file.size,
+          fileName: preparedFile.name,
+          mimeType: preparedFile.type || (kind === "menu_file" ? "application/pdf" : "image/jpeg"),
+          sizeBytes: preparedFile.size,
           sha256,
           contentBase64,
-          kind: "menu_image",
+          kind,
         }),
       });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok)
-        throw new Error(
-          body.error === "MENU_IMAGE_TOO_LARGE"
-            ? "La imagen supera el límite de 200 KB."
-            : body.error || "No se pudo subir la imagen",
-        );
-      updateDraft({ image: body.asset.url });
-      setMessage(`Imagen subida: ${body.asset.folderKey}`);
+      const body = await response.json().catch(() => ({})) as { error?: string; message?: string; asset?: MenuAsset & { folderKey?: string } };
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (response.status === 403) { setMessage("Este perfil no tiene permiso para subir archivos a la carta del local activo."); return; }
+      if (!response.ok) {
+        const messages: Record<string, string> = {
+          MENU_IMAGE_TOO_LARGE: `La imagen supera el límite de ${MAX_MENU_IMAGE_BYTES / 1024} KB tras optimizarla.`,
+          MENU_FILE_TOO_LARGE: "El PDF supera el límite de 4 MB.",
+          MALWARE_DETECTED: "El archivo ha sido rechazado por el analizador antivirus.",
+          MALWARE_SCANNER_UNAVAILABLE: "La subida está temporalmente bloqueada hasta que el antivirus esté disponible.",
+          MENU_ASSET_CONTENT_TYPE_MISMATCH: "El contenido no coincide con el formato declarado.",
+        };
+        throw new Error(messages[body.error || ""] || body.message || body.error || "No se pudo subir el archivo.");
+      }
+      if (!body.asset?.url) throw new Error("La API no devolvió la dirección del archivo.");
+      setAssets((current) => [body.asset as MenuAsset, ...current.filter((asset) => asset.id !== body.asset?.id)]);
+      if (kind === "menu_image") {
+        updateDraft({ image: body.asset.url });
+        const result = file.size > preparedFile.size
+          ? `Foto optimizada de ${Math.ceil(file.size / 1024)} KB a ${Math.ceil(preparedFile.size / 1024)} KB.`
+          : `Imagen subida (${Math.ceil(preparedFile.size / 1024)} KB).`;
+        setMessage(`${result} Analizada por ClamAV.`);
+      } else {
+        setMessage(`PDF de carta subido (${Math.ceil(preparedFile.size / 1024)} KB). Analizado por ClamAV.`);
+      }
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "No se pudo subir la imagen.",
-      );
+      setMessage(error instanceof Error ? error.message : "No se pudo subir el archivo.");
     } finally {
       setUploading(false);
     }
   };
-  const headers = useMemo(
-    () => ({ Authorization: `Bearer ${token}` }),
-    [token],
-  );
   const categories = useMemo(
     () => [
       "Todos",
@@ -144,14 +157,31 @@ export default function MenuEditor({
     filter === "Todos"
       ? items
       : items.filter((item) => item.category === filter);
+  const loadAssets = useCallback(async () => {
+    setAssetsLoading(true);
+    try {
+      const response = await fetch(`${apiOrigin}/api/v1/partners/menu/assets`, { headers, cache: "no-store" });
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (!response.ok) throw new Error(`No se pudieron cargar los archivos (HTTP ${response.status}).`);
+      setAssets(((await response.json()) as { assets?: MenuAsset[] }).assets || []);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudieron cargar los archivos de carta.");
+    } finally {
+      setAssetsLoading(false);
+    }
+  }, [apiOrigin, headers, onUnauthorized]);
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(`${apiOrigin}/api/v1/partners/menu`, {
         headers,
+        cache: "no-store",
       });
-      if (!response.ok) { if (response.status === 401 || response.status === 403) { onUnauthorized(); return; } throw new Error("No se pudo cargar la carta"); }
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (response.status === 403) { setItems([]); throw new Error("Este perfil no tiene permiso para consultar la carta del local activo."); }
+      if (!response.ok) throw new Error(`No se pudo cargar la carta (HTTP ${response.status}).`);
       setItems(((await response.json()) as { menu?: Item[] }).menu || []);
+      await loadAssets();
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "No se pudo cargar la carta.",
@@ -159,60 +189,67 @@ export default function MenuEditor({
     } finally {
       setLoading(false);
     }
-  }, [apiOrigin, headers]);
+  }, [apiOrigin, headers, loadAssets, onUnauthorized]);
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect
     void load();
   }, [load]);
-  const save = async () => {
-    if (!draft?.name.trim() || draft.price < 0)
-      return setMessage("Completa el nombre y un precio válido.");
+  const persistMenu = async (next: Item[], successMessage: string): Promise<boolean> => {
     setSaving(true);
     try {
-      const next = items.some((item) => item.id === draft.id)
-        ? items.map((item) => (item.id === draft.id ? draft : item))
-        : [...items, draft];
       const response = await fetch(`${apiOrigin}/api/v1/partners/menu`, {
         method: "PUT",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({ items: next }),
       });
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || "No se pudo guardar la carta");
-      }
-      setItems(next);
-      setDraft(null);
-      setMessage("Carta guardada correctamente.");
+      if (response.status === 401) { onUnauthorized(); return false; }
+      if (response.status === 403) { setMessage("Este perfil no tiene permiso para modificar la carta del local activo."); return false; }
+      const body = await response.json().catch(() => ({})) as { error?: string; menu?: Item[] };
+      if (!response.ok) throw new Error(body.error || `No se pudo guardar la carta (HTTP ${response.status}).`);
+      setItems(Array.isArray(body.menu) ? body.menu : next);
+      setMessage(successMessage);
+      return true;
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "No se pudo guardar la carta.",
-      );
+      setMessage(error instanceof Error ? error.message : "No se pudo guardar la carta.");
+      return false;
     } finally {
       setSaving(false);
     }
   };
-  const remove = async (id: string) => {
-    const next = items.filter((item) => item.id !== id);
-    setSaving(true);
+  const removeAsset = async (asset: MenuAsset) => {
+    if (!window.confirm(`¿Eliminar «${asset.fileName}» de los archivos de carta?`)) return;
     try {
-      const response = await fetch(`${apiOrigin}/api/v1/partners/menu`, {
-        method: "PUT",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ items: next }),
-      });
-      if (!response.ok) { if (response.status === 401 || response.status === 403) { onUnauthorized(); return; } throw new Error("No se pudo eliminar el producto"); }
-      setItems(next);
-      setMessage("Producto eliminado.");
-      if (draft?.id === id) setDraft(null);
+      const response = await fetch(`${apiOrigin}/api/v1/partners/menu/assets/${encodeURIComponent(asset.id)}`, { method: "DELETE", headers });
+      if (response.status === 401) { onUnauthorized(); return; }
+      const body = await response.json().catch(() => ({})) as { error?: string; message?: string };
+      if (!response.ok) throw new Error(body.message || body.error || `No se pudo eliminar el archivo (HTTP ${response.status}).`);
+      setAssets((current) => current.filter((entry) => entry.id !== asset.id));
+      setMessage("Archivo eliminado correctamente.");
     } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "No se pudo eliminar el producto.",
-      );
-    } finally {
-      setSaving(false);
+      setMessage(error instanceof Error ? error.message : "No se pudo eliminar el archivo.");
+    }
+  };
+  const save = async () => {
+    if (!draft || !draft.name.trim() || !Number.isFinite(draft.price) || draft.price < 0)
+      return setMessage("Completa el nombre y un precio válido.");
+    const next = items.some((item) => item.id === draft.id)
+      ? items.map((item) => (item.id === draft.id ? draft : item))
+      : [...items, draft];
+    if (await persistMenu(next, "Carta guardada correctamente.")) setDraft(null);
+  };
+  const remove = async (id: string) => {
+    const item = items.find((candidate) => candidate.id === id);
+    if (!item || !window.confirm(`¿Eliminar «${item.name}» de la carta? Esta acción no se puede deshacer.`)) return;
+    const next = items.filter((item) => item.id !== id);
+    if (await persistMenu(next, "Producto eliminado.")) setDraft((current) => current?.id === id ? null : current);
+  };
+  const toggleAvailability = async (item: Item) => {
+    if (saving || uploading) return;
+    const updated = { ...item, available: !item.available };
+    const next = items.map((candidate) => candidate.id === item.id ? updated : candidate);
+    const status = updated.available ? "disponible" : "pausado";
+    if (await persistMenu(next, `${item.name} está ${status}.`)) {
+      setDraft((current) => current?.id === item.id ? { ...current, available: updated.available } : current);
     }
   };
   const updateDraft = (patch: Partial<Item>) =>
@@ -265,6 +302,32 @@ export default function MenuEditor({
           <Check size={16} /> {message}
         </p>
       )}
+      <section className="menu-assets-panel" aria-label="Archivos de carta y menús">
+        <div className="menu-assets-header">
+          <div>
+            <p className="eyebrow">ARCHIVOS DE CARTA</p>
+            <h3>Menú digital del local</h3>
+            <p>Sube el PDF que verá tu equipo o comparte una carta visual. Se valida el formato, el peso, el hash y el antivirus antes de guardarlo.</p>
+          </div>
+          <label className="primary-button asset-upload-button">
+            <Upload size={16} /> Subir PDF de carta
+            <input type="file" accept=".pdf,application/pdf" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadAsset(file, "menu_file"); event.currentTarget.value = ""; }} disabled={uploading || saving} />
+          </label>
+        </div>
+        {assetsLoading ? <div className="assets-loading">Cargando archivos seguros…</div> : assets.filter((asset) => asset.kind === "menu_file").length ? (
+          <div className="menu-assets-list">
+            {assets.filter((asset) => asset.kind === "menu_file").map((asset) => (
+              <article className="menu-asset-row" key={asset.id}>
+                <span className="menu-asset-icon"><FileText size={19} /></span>
+                <div><strong>{asset.fileName}</strong><small>{Math.ceil(asset.sizeBytes / 1024)} KB · {asset.scanEngine || "ClamAV"} · limpio</small></div>
+                <span className="asset-clean"><ShieldCheck size={15} /> Analizado</span>
+                <a className="secondary-button compact-button" href={asset.url} target="_blank" rel="noreferrer">Abrir</a>
+                <button type="button" className="icon-action danger" onClick={() => void removeAsset(asset)} disabled={uploading || saving} aria-label={`Eliminar ${asset.fileName}`}><Trash2 size={15} /></button>
+              </article>
+            ))}
+          </div>
+        ) : <p className="assets-empty">Todavía no hay un PDF de carta subido. El producto puede seguir usando su propia imagen.</p>}
+      </section>
       <div className="menu-kpis">
         <div>
           <span>Productos</span>
@@ -342,10 +405,12 @@ export default function MenuEditor({
                   </div>
                   <div className="product-actions">
                     <button
+                      type="button"
                       className={`availability-toggle ${item.available ? "is-on" : ""}`}
-                      onClick={() => {
-                        setDraft({ ...item, available: !item.available });
-                      }}
+                      onClick={() => void toggleAvailability(item)}
+                      disabled={saving}
+                      role="switch"
+                      aria-checked={item.available}
                       aria-label={
                         item.available ? "Pausar producto" : "Activar producto"
                       }
@@ -452,17 +517,17 @@ export default function MenuEditor({
               <label>
                 Imagen del producto{" "}
                 <span className="field-hint">
-                  WEBP, JPG, JPEG o PNG · máximo 200 KB
+                  WEBP, JPG, JPEG, PNG o GIF · máximo 200 KB tras optimizar
                 </span>
                 <input
                   type="file"
-                  accept=".webp,.jpg,.jpeg,.png,image/webp,image/jpeg,image/png"
+                  accept={MENU_IMAGE_ACCEPT}
                   onChange={(event) => {
                     const file = event.target.files?.[0];
-                    if (file) void uploadImage(file);
+                    if (file) void uploadAsset(file, "menu_image");
                     event.currentTarget.value = "";
                   }}
-                  disabled={uploading}
+                  disabled={uploading || saving}
                 />
                 {draft.image && (
                   <span className="image-uploaded">
@@ -614,8 +679,10 @@ export default function MenuEditor({
                 </button>
                 {items.some((item) => item.id === draft.id) && (
                   <button
+                    type="button"
                     className="danger-button"
                     onClick={() => void remove(draft.id)}
+                    disabled={saving || uploading}
                   >
                     <Trash2 size={15} /> Eliminar
                   </button>
@@ -623,7 +690,7 @@ export default function MenuEditor({
                 <button
                   className="primary-button save-button"
                   onClick={() => void save()}
-                  disabled={saving}
+                  disabled={saving || uploading}
                 >
                   <Save size={16} />{" "}
                   {saving ? "Guardando…" : "Guardar producto"}
