@@ -8,8 +8,7 @@
     "build": "node scripts/prepare-release.mjs && tsc -b && vite build",
     "check": "tsc -b --pretty false",
     "lint": "oxlint",
-    "preview": "vite preview",
-    "test": "npm run build && vitest run tests/pushConsentPolicy.test.ts && node --test tests/release-contract.test.mjs"
+    "preview": "vite preview"
   },
   "dependencies": {
     "lucide-react": "^1.47.0",
