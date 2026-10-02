@@ -1,19 +1,22 @@
-import { useEffect, useState } from "react";
-import { BarChart3, Bell, ChevronDown, CircleHelp, LogOut, Menu, PackageSearch, Store, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { BarChart3, Bell, BookOpen, ChevronDown, CircleHelp, LogOut, Menu, PackageSearch, Store, X } from "lucide-react";
 import "./App.css";
 import EmployeeAuthGate from "./EmployeeAuthGate";
+import MenuEditor from "./MenuEditor";
 import MenuAvailability from "./MenuAvailability";
 import OrdersBoard from "./OrdersBoard";
 import PerformanceView from "./PerformanceView";
 import { apiOrigin, displayRole, hasPermission, normalisePartnerProfile, partnerHeaders, type PartnerLocation, type PartnerProfile } from "./partnerApi";
+import { visiblePartnerViews, type PartnerView } from "./partnerNavigation";
 import { partnerSessionIssue, shouldClearPartnerSession } from "./sessionRecovery";
 
 /* oxlint-disable react/set-state-in-effect -- effects reconcile authenticated profile and active location. */
 
-type View = "orders" | "menu" | "performance";
+type View = PartnerView;
 const tokenKey = `piki-${location.hostname}-api-token`;
 const navigation: Array<{ id: View; label: string; icon: typeof Bell }> = [
   { id: "orders", label: "Pedidos", icon: Bell },
+  { id: "catalog", label: "Carta del restaurante", icon: BookOpen },
   { id: "menu", label: "Disponibilidad", icon: PackageSearch },
   { id: "performance", label: "Rendimiento", icon: BarChart3 },
 ];
@@ -96,7 +99,7 @@ function App() {
   const [activeView, setActiveView] = useState<View>("orders");
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const clearSession = () => {
+  const clearSession = useCallback(() => {
     localStorage.removeItem(tokenKey);
     sessionStorage.removeItem(tokenKey);
     setToken("");
@@ -104,7 +107,7 @@ function App() {
     setActiveLocationId("");
     setCheckingSession(false);
     setSessionIssue("");
-  };
+  }, []);
 
   const retrySession = () => {
     setSessionIssue("");
@@ -138,7 +141,7 @@ function App() {
     };
     void validate();
     return () => { cancelled = true; };
-  }, [token, sessionRetry]);
+  }, [clearSession, token, sessionRetry]);
 
   if (checkingSession) return <main className="auth-page"><p>Comprobando acceso seguro a PIKI Partner Orders…</p></main>;
   if (token && !profile && sessionIssue) return <SessionRecovery message={sessionIssue} onRetry={retrySession} onLogout={clearSession} />;
@@ -153,11 +156,13 @@ function App() {
   const canMenuRead = hasPermission(location, "menu:read");
   const canMenu = hasPermission(location, "menu:write");
   const canMetrics = hasPermission(location, "metrics:read");
-  const availableNavigation = navigation.filter((item) => (
-    (item.id === "orders" && canOrdersRead)
-    || (item.id === "menu" && canMenuRead)
-    || (item.id === "performance" && canMetrics)
-  ));
+  const visibleViews = new Set(visiblePartnerViews({
+    ordersRead: canOrdersRead,
+    menuRead: canMenuRead,
+    menuWrite: canMenu,
+    metricsRead: canMetrics,
+  }));
+  const availableNavigation = navigation.filter((item) => visibleViews.has(item.id));
   const currentView = availableNavigation.some((item) => item.id === activeView) ? activeView : availableNavigation[0]?.id;
   const role = location.roles[0] || "operador";
 
@@ -178,6 +183,7 @@ function App() {
       <div className="orders-page">
         {!currentView && <div className="orders-loading">Este perfil no tiene permisos operativos para el local seleccionado. Contacta con el administrador de tu cuenta PIKI.</div>}
         {currentView === "orders" && <OrdersBoard token={token} locationId={location.id} canRead={canOrdersRead} canOperate={canOrdersOperate} canCancel={canCancel} onUnauthorized={clearSession} />}
+        {currentView === "catalog" && canMenu && <MenuEditor key={location.id} apiOrigin={apiOrigin} token={token} locationId={location.id} onUnauthorized={clearSession} />}
         {currentView === "menu" && <MenuAvailability token={token} locationId={location.id} canRead={canMenuRead} canEdit={canMenu} onUnauthorized={clearSession} />}
         {currentView === "performance" && <PerformanceView token={token} locationId={location.id} canRead={canMetrics} onUnauthorized={clearSession} />}
       </div>

@@ -9,7 +9,7 @@
     "check": "tsc -b --pretty false",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "npm run build && vitest run tests/pushConsentPolicy.test.ts tests/partnerApi.test.ts tests/sessionRecovery.test.ts && node --test tests/release-contract.test.mjs"
+    "test": "npm run build && vitest run tests/pushConsentPolicy.test.ts tests/partnerApi.test.ts tests/sessionRecovery.test.ts tests/partnerNavigation.test.ts tests/menuImage.test.ts && node --test tests/release-contract.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.47.0",

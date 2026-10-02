@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasPermission, normalisePartnerProfile } from "../src/partnerApi";
+import { hasPermission, normalisePartnerProfile, partnerHeaders } from "../src/partnerApi";
 
 describe("normalisePartnerProfile", () => {
   it("keeps permissions scoped to each membership", () => {
@@ -34,5 +34,15 @@ describe("normalisePartnerProfile", () => {
     expect(profile.locations).toHaveLength(1);
     expect(hasPermission(profile.locations[0], "orders:read")).toBe(true);
     expect(hasPermission(profile.locations[0], "menu:write")).toBe(false);
+  });
+});
+
+describe("partnerHeaders", () => {
+  it("scopes restaurant operations to the selected location", () => {
+    expect(partnerHeaders("session-token", "restaurant-123")).toEqual({
+      Authorization: "Bearer session-token",
+      "X-PIKI-Surface": "partner",
+      "X-PIKI-Restaurant-Id": "restaurant-123",
+    });
   });
 });
