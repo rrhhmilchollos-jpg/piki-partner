@@ -10,6 +10,9 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import "./MenuEditor.css";
+import { partnerHeaders } from "./partnerApi";
+import { bytesToBase64, prepareMenuImage } from "./menuImage";
 
 type Modifier = {
   id: string;
@@ -59,10 +62,12 @@ const money = new Intl.NumberFormat("es-ES", {
 export default function MenuEditor({
   apiOrigin,
   token,
+  locationId,
   onUnauthorized,
 }: {
   apiOrigin: string;
   token: string;
+  locationId: string;
   onUnauthorized: () => void;
 }) {
   const [items, setItems] = useState<Item[]>([]);
@@ -72,30 +77,15 @@ export default function MenuEditor({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [filter, setFilter] = useState("Todos");
-  const MAX_IMAGE_BYTES = 200 * 1024;
-  const ACCEPTED_IMAGE_TYPES = ["image/webp", "image/jpeg", "image/png"];
-  const encodeFile = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
-      reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
-      reader.readAsDataURL(file);
-    });
+  const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
   const uploadImage = async (file: File) => {
     if (!draft) return;
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type))
-      return setMessage("Solo se permiten archivos .webp, .jpg, .jpeg o .png.");
-    if (file.size > MAX_IMAGE_BYTES)
-      return setMessage(
-        "La imagen supera el límite máximo de 200 KB por archivo.",
-      );
     setUploading(true);
-    setMessage("");
+    setMessage("Preparando la imagen para subirla…");
     try {
-      const contentBase64 = await encodeFile(file);
-      const bytes = Uint8Array.from(atob(contentBase64), (character) =>
-        character.charCodeAt(0),
-      );
+      const imageFile = await prepareMenuImage(file);
+      const bytes = new Uint8Array(await imageFile.arrayBuffer());
+      const contentBase64 = bytesToBase64(bytes);
       const digestBuffer = await crypto.subtle.digest("SHA-256", bytes);
       const sha256 = Array.from(new Uint8Array(digestBuffer))
         .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -104,23 +94,24 @@ export default function MenuEditor({
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
-          fileName: file.name,
-          mimeType: file.type,
-          sizeBytes: file.size,
+          fileName: imageFile.name,
+          mimeType: imageFile.type,
+          sizeBytes: imageFile.size,
           sha256,
           contentBase64,
           kind: "menu_image",
         }),
       });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok)
-        throw new Error(
-          body.error === "MENU_IMAGE_TOO_LARGE"
-            ? "La imagen supera el límite de 200 KB."
-            : body.error || "No se pudo subir la imagen",
-        );
+      const body = await response.json().catch(() => ({})) as { error?: string; asset?: { url?: string; folderKey?: string } };
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (response.status === 403) { setMessage("Este perfil no tiene permiso para subir imágenes a la carta del local activo."); return; }
+      if (!response.ok) throw new Error(body.error === "MENU_IMAGE_TOO_LARGE" ? "La imagen supera el límite de 200 KB tras optimizarla." : body.error || "No se pudo subir la imagen.");
+      if (!body.asset?.url) throw new Error("La API no devolvió la dirección de la imagen.");
       updateDraft({ image: body.asset.url });
-      setMessage(`Imagen subida: ${body.asset.folderKey}`);
+      const result = file.size > imageFile.size
+        ? `Foto optimizada de ${Math.ceil(file.size / 1024)} KB a ${Math.ceil(imageFile.size / 1024)} KB.`
+        : `Imagen subida (${Math.ceil(imageFile.size / 1024)} KB).`;
+      setMessage(`${result} ${body.asset.folderKey ? `Carpeta: ${body.asset.folderKey}` : ""}`.trim());
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "No se pudo subir la imagen.",
@@ -129,10 +120,6 @@ export default function MenuEditor({
       setUploading(false);
     }
   };
-  const headers = useMemo(
-    () => ({ Authorization: `Bearer ${token}` }),
-    [token],
-  );
   const categories = useMemo(
     () => [
       "Todos",
@@ -149,8 +136,11 @@ export default function MenuEditor({
     try {
       const response = await fetch(`${apiOrigin}/api/v1/partners/menu`, {
         headers,
+        cache: "no-store",
       });
-      if (!response.ok) { if (response.status === 401 || response.status === 403) { onUnauthorized(); return; } throw new Error("No se pudo cargar la carta"); }
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (response.status === 403) { setItems([]); throw new Error("Este perfil no tiene permiso para consultar la carta del local activo."); }
+      if (!response.ok) throw new Error(`No se pudo cargar la carta (HTTP ${response.status}).`);
       setItems(((await response.json()) as { menu?: Item[] }).menu || []);
     } catch (error) {
       setMessage(
@@ -159,60 +149,54 @@ export default function MenuEditor({
     } finally {
       setLoading(false);
     }
-  }, [apiOrigin, headers]);
+  }, [apiOrigin, headers, onUnauthorized]);
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect
     void load();
   }, [load]);
-  const save = async () => {
-    if (!draft?.name.trim() || draft.price < 0)
-      return setMessage("Completa el nombre y un precio válido.");
+  const persistMenu = async (next: Item[], successMessage: string): Promise<boolean> => {
     setSaving(true);
     try {
-      const next = items.some((item) => item.id === draft.id)
-        ? items.map((item) => (item.id === draft.id ? draft : item))
-        : [...items, draft];
       const response = await fetch(`${apiOrigin}/api/v1/partners/menu`, {
         method: "PUT",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({ items: next }),
       });
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || "No se pudo guardar la carta");
-      }
-      setItems(next);
-      setDraft(null);
-      setMessage("Carta guardada correctamente.");
+      if (response.status === 401) { onUnauthorized(); return false; }
+      if (response.status === 403) { setMessage("Este perfil no tiene permiso para modificar la carta del local activo."); return false; }
+      const body = await response.json().catch(() => ({})) as { error?: string; menu?: Item[] };
+      if (!response.ok) throw new Error(body.error || `No se pudo guardar la carta (HTTP ${response.status}).`);
+      setItems(Array.isArray(body.menu) ? body.menu : next);
+      setMessage(successMessage);
+      return true;
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "No se pudo guardar la carta.",
-      );
+      setMessage(error instanceof Error ? error.message : "No se pudo guardar la carta.");
+      return false;
     } finally {
       setSaving(false);
     }
   };
+  const save = async () => {
+    if (!draft || !draft.name.trim() || !Number.isFinite(draft.price) || draft.price < 0)
+      return setMessage("Completa el nombre y un precio válido.");
+    const next = items.some((item) => item.id === draft.id)
+      ? items.map((item) => (item.id === draft.id ? draft : item))
+      : [...items, draft];
+    if (await persistMenu(next, "Carta guardada correctamente.")) setDraft(null);
+  };
   const remove = async (id: string) => {
+    const item = items.find((candidate) => candidate.id === id);
+    if (!item || !window.confirm(`¿Eliminar «${item.name}» de la carta? Esta acción no se puede deshacer.`)) return;
     const next = items.filter((item) => item.id !== id);
-    setSaving(true);
-    try {
-      const response = await fetch(`${apiOrigin}/api/v1/partners/menu`, {
-        method: "PUT",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ items: next }),
-      });
-      if (!response.ok) { if (response.status === 401 || response.status === 403) { onUnauthorized(); return; } throw new Error("No se pudo eliminar el producto"); }
-      setItems(next);
-      setMessage("Producto eliminado.");
-      if (draft?.id === id) setDraft(null);
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "No se pudo eliminar el producto.",
-      );
-    } finally {
-      setSaving(false);
+    if (await persistMenu(next, "Producto eliminado.")) setDraft((current) => current?.id === id ? null : current);
+  };
+  const toggleAvailability = async (item: Item) => {
+    if (saving || uploading) return;
+    const updated = { ...item, available: !item.available };
+    const next = items.map((candidate) => candidate.id === item.id ? updated : candidate);
+    const status = updated.available ? "disponible" : "pausado";
+    if (await persistMenu(next, `${item.name} está ${status}.`)) {
+      setDraft((current) => current?.id === item.id ? { ...current, available: updated.available } : current);
     }
   };
   const updateDraft = (patch: Partial<Item>) =>
@@ -342,10 +326,12 @@ export default function MenuEditor({
                   </div>
                   <div className="product-actions">
                     <button
+                      type="button"
                       className={`availability-toggle ${item.available ? "is-on" : ""}`}
-                      onClick={() => {
-                        setDraft({ ...item, available: !item.available });
-                      }}
+                      onClick={() => void toggleAvailability(item)}
+                      disabled={saving}
+                      role="switch"
+                      aria-checked={item.available}
                       aria-label={
                         item.available ? "Pausar producto" : "Activar producto"
                       }
@@ -452,7 +438,7 @@ export default function MenuEditor({
               <label>
                 Imagen del producto{" "}
                 <span className="field-hint">
-                  WEBP, JPG, JPEG o PNG · máximo 200 KB
+                  WEBP, JPG, JPEG o PNG · las fotos grandes se optimizan automáticamente
                 </span>
                 <input
                   type="file"
@@ -462,7 +448,7 @@ export default function MenuEditor({
                     if (file) void uploadImage(file);
                     event.currentTarget.value = "";
                   }}
-                  disabled={uploading}
+                  disabled={uploading || saving}
                 />
                 {draft.image && (
                   <span className="image-uploaded">
@@ -614,8 +600,10 @@ export default function MenuEditor({
                 </button>
                 {items.some((item) => item.id === draft.id) && (
                   <button
+                    type="button"
                     className="danger-button"
                     onClick={() => void remove(draft.id)}
+                    disabled={saving || uploading}
                   >
                     <Trash2 size={15} /> Eliminar
                   </button>
@@ -623,7 +611,7 @@ export default function MenuEditor({
                 <button
                   className="primary-button save-button"
                   onClick={() => void save()}
-                  disabled={saving}
+                  disabled={saving || uploading}
                 >
                   <Save size={16} />{" "}
                   {saving ? "Guardando…" : "Guardar producto"}
