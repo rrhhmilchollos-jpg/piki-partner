@@ -73,3 +73,14 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .release-warning { position: fixed; z-index: 100; top: 0; left: 0; right: 0; padding: 8px 14px; color: #6f5000; background: #fff1bd; text-align: center; font-size: 11px; }
 .push-consent { position: fixed; z-index: 80; right: 16px; bottom: 16px; width: min(330px, calc(100% - 32px)); padding: 17px; border-radius: 16px; color: #fff; background: #1c1c1c; box-shadow: 0 16px 36px rgba(0,0,0,.24); }
 .push-consent > button:first-child { float: right; border: 0; color: #fff; background: transparent; font-size: 21px; }.push-consent strong { display: block; margin-bottom: 5px; }.push-consent p { margin: 0 0 12px; color: #c8c8c8; font-size: 12px; line-height: 1.4; }.push-consent > button:not(:first-child) { min-height: 35px; padding: 0 11px; border: 0; border-radius: 8px; color: #171717; background: #ffd400; font-size: 11px; font-weight: 800; }
+
+
+/* PIKI visual refresh — a warm counter for busy teams */
+:root { --piki-coral:#ff785f; --piki-yellow:#ffd72e; --piki-mint:#dff5df; }
+body { background:radial-gradient(circle at 90% 0%, rgba(255,215,46,.2), transparent 28%), #f3f4f2; }
+.orders-brand { position:relative; }
+.orders-brand::after { content:"Serios con cada pedido · cercanos con cada cliente"; position:absolute; left:49px; top:52px; color:#8fc19d; font-size:9px; font-weight:800; letter-spacing:.04em; white-space:nowrap; }
+.orders-page { background:linear-gradient(180deg,rgba(255,255,255,.22),transparent 160px); }
+.order-card, .performance-grid article, .empty-panel, .availability-panel { transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+.order-card:hover, .performance-grid article:hover, .empty-panel:hover, .availability-panel:hover { transform:translateY(-2px); box-shadow:0 16px 30px rgba(23,23,23,.1); border-color:#cce6d3; }
+.order-action { box-shadow:0 7px 15px rgba(255,215,46,.18); }
