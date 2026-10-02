@@ -1,8 +1,15 @@
 export type PikiRealtimeEvent = { id?: string; type: string; payload: Record<string, unknown>; occurredAt?: string };
 
-export function connectPikiRealtime(input: { apiOrigin: string; token: string; surface: "partner" | "fleet" | "admin" | "rider"; onEvent: (event: PikiRealtimeEvent) => void; onState?: (connected: boolean) => void }) {
+export function connectPikiRealtime(input: {
+  apiOrigin: string;
+  token: string;
+  locationId?: string;
+  surface: "partner" | "fleet" | "admin" | "rider";
+  onEvent: (event: PikiRealtimeEvent) => void;
+  onState?: (connected: boolean) => void;
+}) {
   const controller = new AbortController();
-  const storageKey = `piki-realtime-last-event:${input.surface}`;
+  const storageKey = `piki-realtime-last-event:${input.surface}:${input.locationId || "assigned"}`;
   const sleep = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
   const run = async () => {
     while (!controller.signal.aborted) {
@@ -10,7 +17,12 @@ export function connectPikiRealtime(input: { apiOrigin: string; token: string; s
         const lastId = sessionStorage.getItem(storageKey) || "";
         const response = await fetch(`${input.apiOrigin}/api/v1/realtime/events`, {
           signal: controller.signal,
-          headers: { Authorization: `Bearer ${input.token}`, "X-PIKI-Surface": input.surface, ...(lastId ? { "Last-Event-ID": lastId } : {}) },
+          headers: {
+            Authorization: `Bearer ${input.token}`,
+            "X-PIKI-Surface": input.surface,
+            ...(input.locationId && input.locationId !== "assigned-store" ? { "X-PIKI-Restaurant-Id": input.locationId } : {}),
+            ...(lastId ? { "Last-Event-ID": lastId } : {}),
+          },
           credentials: "include",
         });
         if (!response.ok || !response.body) throw new Error(`SSE_HTTP_${response.status}`);
@@ -32,8 +44,8 @@ export function connectPikiRealtime(input: { apiOrigin: string; token: string; s
             try {
               const parsed = JSON.parse(data) as PikiRealtimeEvent;
               if (eventId) sessionStorage.setItem(storageKey, eventId);
-              if (parsed.type) { window.dispatchEvent(new CustomEvent("piki:realtime", { detail: parsed })); input.onEvent(parsed); }
-            } catch { /* malformed frames are ignored and the stream continues */ }
+              if (parsed.type) input.onEvent(parsed);
+            } catch { /* malformed frames are ignored while the stream continues */ }
           }
         }
       } catch { input.onState?.(false); }
