@@ -58,7 +58,7 @@ export async function updateServiceWorkerAndReloadOnce(minimumVersion: string): 
     try {
       const registration = await navigator.serviceWorker.getRegistration("/")
         ?? await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
-      await registration.update();
+      if (typeof registration.update === "function") await registration.update();
       registration.waiting?.postMessage({ type: "SKIP_WAITING" });
     } catch {
       // The single reload below still lets a network-served build replace a stale worker.
