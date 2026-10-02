@@ -1,5 +1,7 @@
-export const PARTNER_RELEASE_VERSION = "0.3.1";
-export const PARTNER_SURFACE = "partner";
+import { PIKI_RELEASE } from "./release-meta";
+
+export const PARTNER_RELEASE_VERSION = PIKI_RELEASE.version;
+export const PARTNER_SURFACE = PIKI_RELEASE.surface;
 
 export type ReleaseManifest = {
   version?: unknown;

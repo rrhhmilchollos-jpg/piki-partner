@@ -17,6 +17,10 @@ function buildId() {
 const forceUpdate = process.env.PIKI_FORCE_UPDATE !== "false";
 const release = { surface, version, minimumVersion: forceUpdate ? version : "0.0.0", buildId: buildId(), forceUpdate };
 const publicDir = path.join(root, "public");
+const manifestPath = path.join(publicDir, "manifest.json");
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+manifest.version = version;
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 fs.writeFileSync(path.join(publicDir, "release.json"), `${JSON.stringify(release, null, 2)}\n`);
 fs.writeFileSync(path.join(root, "src", "release-meta.ts"), `export const PIKI_RELEASE = ${JSON.stringify(release, null, 2)} as const;\n`);
 const template = fs.readFileSync(path.join(publicDir, "sw.template.js"), "utf8");
