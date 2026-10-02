@@ -20,7 +20,7 @@ export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: { apiOr
         const response = await fetch(`${apiOrigin}/api/v1/auth/employee/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-PIKI-Surface": "partner" },
-          body: JSON.stringify({ email, password: current }),
+          body: JSON.stringify({ email, password: current, role: "partner" }),
         });
         const data = await response.json().catch(() => ({})) as { accessToken?: string; requiresPasswordChange?: boolean };
         if (!response.ok || !data.accessToken) throw new Error(await getApiErrorMessage(response, "No se ha podido iniciar sesión."));
