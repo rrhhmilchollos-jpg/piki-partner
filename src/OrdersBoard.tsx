@@ -10,7 +10,8 @@ export type PartnerOrder = PartnerKitchenOrder & {
   publicCode?: string;
   createdAt: string;
   customer?: { name?: string } | null;
-  items?: { name?: string; quantity?: number; priceCents?: number }[];
+  deliveryAddress?: string;
+  items?: { name?: string; quantity?: number; unitPriceCents?: number; selectedOptions?: { optionName?: string }[] }[];
   totalCents?: number;
   paymentMethod?: "stripe" | "bizum" | "cash";
   cashDueAtDelivery?: boolean;
@@ -54,6 +55,11 @@ function countdown(order: PartnerOrder, now: number): string {
 
 function money(cents?: number): string {
   return ((cents ?? 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" });
+}
+
+function orderTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Hora no disponible" : date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function OrdersBoard({
@@ -191,10 +197,11 @@ export default function OrdersBoard({
           <div className="lane-cards">
             {laneOrders.map((order) => <article key={order._id} className={`order-card ${lane.status === "pending" ? "is-new" : ""}`}>
               <div className="order-card-top">
-                <div><span className="order-code">#{order.publicCode || order._id.slice(-6).toUpperCase()}</span><small>{order.customer?.name || "Cliente PIKI"}</small></div>
+                <div><span className="order-code">#{order.publicCode || order._id.slice(-6).toUpperCase()}</span><small>{order.customer?.name || "Cliente PIKI"}</small><small>Recibido a las {orderTime(order.createdAt)}</small></div>
                 <div className={`countdown ${orderDeadline(order) <= now ? "is-late" : ""}`}><Clock3 size={15} /><b>{countdown(order, now)}</b></div>
               </div>
-              <ul className="order-items">{(order.items ?? []).map((item, index) => <li key={`${order._id}-${index}`}><b>{item.quantity ?? 1}×</b><span>{item.name || "Producto"}</span></li>)}</ul>
+              <ul className="order-items">{(order.items ?? []).map((item, index) => <li key={`${order._id}-${index}`}><b>{item.quantity ?? 1}×</b><span><strong>{item.name || "Producto"}</strong>{item.selectedOptions?.length ? <small>{item.selectedOptions.map((option) => option.optionName).filter(Boolean).join(" · ")}</small> : null}</span></li>)}</ul>
+              {order.deliveryAddress && <p className="order-address"><span>Entrega</span>{order.deliveryAddress}</p>}
               <div className="order-meta"><span>{isCashOrder(order) ? "Contra reembolso" : "Pago online"}</span><strong>{money(order.totalCents)}</strong></div>
               <div className="order-card-actions">
                 {lane.action && <button type="button" className="order-action" disabled={!canOperate || busyOrderId === order._id} onClick={() => void move(order, lane.action!.to)}>{busyOrderId === order._id ? "Guardando…" : lane.action.label}<ChevronRight size={17} /></button>}
