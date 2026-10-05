@@ -182,11 +182,10 @@ export function PikiReleaseGate({ children }: { children: ReactNode }) {
       await registerWorker();
       const policy = await fetchPolicy();
       if (!isValidPolicy(policy)) throw new Error("La política de versión no es válida.");
-      // A policy from an older API deployment must never lock out a newer web client.
-      // Semantic minimumVersion is the compatibility contract; a differing build ID alone
-      // is not enough to block an active restaurant from receiving orders.
+      // A changed build activates the newly downloaded service worker; an API
+      // compatibility block still relies on the semantic minimum version.
       const requiresUpdate = policy.forceUpdate
-        && isNewer(policy.minimumVersion, PIKI_RELEASE.version);
+        && (policy.updateRequired === true || isNewer(policy.minimumVersion, PIKI_RELEASE.version) || policy.buildId !== PIKI_RELEASE.buildId);
       if (requiresUpdate) {
         setRequiredVersion(`${String(policy.version || policy.minimumVersion)} · ${policy.buildId}`);
         setState("required");
