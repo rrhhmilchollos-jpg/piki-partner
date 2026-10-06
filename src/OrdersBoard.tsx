@@ -19,6 +19,8 @@ export type PartnerOrder = PartnerKitchenOrder & {
   acceptanceDeadline?: string;
   preparationDeadline?: string;
   estimatedReadyAt?: string;
+  partnerPrepDeadlineAt?: string | null;
+  preparationMinutes?: number;
 };
 
 type OrderStatus = "pending" | "accepted" | "preparing" | "ready_for_pickup";
@@ -166,6 +168,13 @@ export default function OrdersBoard({
     }
   };
 
+  const printOrder = (order: PartnerOrder) => {
+    if (order.status === "pending") {
+      setMessage("Antes de imprimir, acepta el pedido para avisar al Rider del plazo máximo de 10 minutos.");
+      return;
+    }
+    window.print();
+  };
   return <section className="orders-workspace" aria-label="Pedidos PIKI Partner Orders">
     <header className="orders-heading">
       <div>
@@ -203,10 +212,14 @@ export default function OrdersBoard({
               <ul className="order-items">{(order.items ?? []).map((item, index) => <li key={`${order._id}-${index}`}><b>{item.quantity ?? 1}×</b><span><strong>{item.name || "Producto"}</strong>{item.selectedOptions?.length ? <small>{item.selectedOptions.map((option) => option.optionName).filter(Boolean).join(" · ")}</small> : null}</span></li>)}</ul>
               {order.deliveryAddress && <p className="order-address"><span>Entrega</span>{order.deliveryAddress}</p>}
               <div className="order-meta"><span>{isCashOrder(order) ? "Contra reembolso" : "Pago online"}</span><strong>{money(order.totalCents)}</strong></div>
+              <div className={`rider-readiness readiness-${order.status === "ready_for_pickup" ? "ready" : order.status === "pending" ? "pending" : "within_10_minutes"}`}>
+                <strong>Información para el Rider</strong>
+                {order.status === "ready_for_pickup" ? <span>✅ Listo para recoger · Rider avisado</span> : order.status === "pending" ? <span>Acepta el pedido para iniciar el plazo máximo de 10 minutos.</span> : <span>⏱️ Preparación comunicada: máximo 10 minutos · el Rider puede dirigirse al local.</span>}
+              </div>
               <div className="order-card-actions">
                 {lane.action && <button type="button" className="order-action" disabled={!canOperate || busyOrderId === order._id} onClick={() => void move(order, lane.action!.to)}>{busyOrderId === order._id ? "Guardando…" : lane.action.label}<ChevronRight size={17} /></button>}
                 {lane.status === "ready_for_pickup" && <button type="button" className="ready-label" disabled>Rider avisado</button>}
-                <button type="button" className="print-control" onClick={() => window.print()} aria-label={`Imprimir pedido ${order.publicCode || order._id}`}><Printer size={16} /></button>
+                <button type="button" className="print-control" onClick={() => printOrder(order)} aria-label={`Imprimir pedido ${order.publicCode || order._id}`} title={order.status === "pending" ? "Acepta primero para comunicar el plazo al Rider" : "Imprimir ticket"}><Printer size={16} /></button>
               </div>
               {canCancel && lane.status !== "ready_for_pickup" && <button type="button" className="incident-control" disabled={busyOrderId === order._id} onClick={() => void move(order, "cancelled")}>Registrar incidencia</button>}
             </article>)}

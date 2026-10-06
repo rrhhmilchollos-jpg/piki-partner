@@ -84,3 +84,5 @@ body { background:radial-gradient(circle at 90% 0%, rgba(255,215,46,.2), transpa
 .order-card, .performance-grid article, .empty-panel, .availability-panel { transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
 .order-card:hover, .performance-grid article:hover, .empty-panel:hover, .availability-panel:hover { transform:translateY(-2px); box-shadow:0 16px 30px rgba(23,23,23,.1); border-color:#cce6d3; }
 .order-action { box-shadow:0 7px 15px rgba(255,215,46,.18); }
+
+.rider-readiness { display:grid; gap:5px; margin:10px 0; padding:10px; border-radius:10px; background:#f6f6f4; color:#555; font-size:10px; }.rider-readiness strong { color:#262626; font-size:10px; }.rider-readiness span { line-height:1.35; }.readiness-within_10_minutes { color:#7a5b00; background:#fff7d8; }.readiness-ready { color:#167044; background:#eaf9ef; }
