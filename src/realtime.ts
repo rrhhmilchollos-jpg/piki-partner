@@ -44,7 +44,10 @@ export function connectPikiRealtime(input: {
             try {
               const parsed = JSON.parse(data) as PikiRealtimeEvent;
               if (eventId) sessionStorage.setItem(storageKey, eventId);
-              if (parsed.type) input.onEvent(parsed);
+              if (parsed.type) {
+                input.onEvent(parsed);
+                window.dispatchEvent(new CustomEvent("piki:realtime", { detail: parsed }));
+              }
             } catch { /* malformed frames are ignored while the stream continues */ }
           }
         }
