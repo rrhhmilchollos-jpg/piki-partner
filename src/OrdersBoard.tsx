@@ -190,7 +190,7 @@ export default function OrdersBoard({
         {connected ? <Wifi size={16} /> : <WifiOff size={16} />}
         <span>{connected ? "Conectado en directo" : "Sincronización automática"}</span>
         <button type="button" className="icon-control" onClick={() => void load()} aria-label="Actualizar pedidos"><RefreshCw size={17} /></button>
-      </div>
+      </div></div>
     </header>
 
     <PartnerOrderAlarmBanner count={activeCount} audioReady={audioReady} onEnableAudio={() => { void prepareAudio(); }} />
