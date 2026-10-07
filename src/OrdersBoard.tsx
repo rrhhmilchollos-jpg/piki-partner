@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BellRing, ChevronRight, CircleAlert, Clock3, Printer, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { BellRing, ChevronRight, CircleAlert, Clock3, MessageSquare, Printer, RefreshCw, Send, Wifi, WifiOff } from "lucide-react";
 import { PartnerOrderAlarmBanner, type PartnerKitchenOrder, usePartnerOrderAlarm } from "./PartnerOrderAlarm";
 import { apiOrigin, partnerHeaders } from "./partnerApi";
 import { connectPikiRealtime } from "./realtime";
@@ -85,6 +85,9 @@ export default function OrdersBoard({
   const [busyOrderId, setBusyOrderId] = useState("");
   const [connected, setConnected] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [supportBusy, setSupportBusy] = useState(false);
+  const [supportForm, setSupportForm] = useState({ orderId: "", priority: "normal", subject: "", description: "" });
   const { activeCount, audioReady, prepareAudio, reconcileKitchenOrders, notifyPaidOrder, resolveOrder } = usePartnerOrderAlarm();
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
 
@@ -175,6 +178,7 @@ export default function OrdersBoard({
     }
     window.print();
   };
+  const submitSupportTicket = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); if (supportBusy) return; setSupportBusy(true); try { const response = await fetch(`${apiOrigin}/api/v1/partners/support/tickets`, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ ...supportForm, orderId: supportForm.orderId || undefined }) }); const payload = await response.json().catch(() => ({})) as { error?: string; message?: string; ticket?: { ticketNumber?: string } }; if (response.status === 401) { onUnauthorized(); return; } if (!response.ok) throw new Error(payload.message || payload.error || "No se pudo enviar la incidencia."); setSupportForm({ orderId: "", priority: "normal", subject: "", description: "" }); setSupportOpen(false); setMessage(`Incidencia ${payload.ticket?.ticketNumber || "creada"}. Soporte ya puede atenderla.`); } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo enviar la incidencia."); } finally { setSupportBusy(false); } };
   return <section className="orders-workspace" aria-label="Pedidos PIKI Partner Orders">
     <header className="orders-heading">
       <div>
@@ -182,7 +186,7 @@ export default function OrdersBoard({
         <h1>Pedidos</h1>
         <p>Gestiona cada comanda sin perder el ritmo del local.</p>
       </div>
-      <div className={`connection-status ${connected ? "is-live" : ""}`} aria-live="polite">
+      <div className="orders-heading-actions"><button type="button" className="support-trigger" onClick={() => setSupportOpen((current) => !current)}><MessageSquare size={16} /> {supportOpen ? "Cerrar soporte" : "Contactar con soporte"}</button><div className={`connection-status ${connected ? "is-live" : ""}`} aria-live="polite">
         {connected ? <Wifi size={16} /> : <WifiOff size={16} />}
         <span>{connected ? "Conectado en directo" : "Sincronización automática"}</span>
         <button type="button" className="icon-control" onClick={() => void load()} aria-label="Actualizar pedidos"><RefreshCw size={17} /></button>
@@ -190,7 +194,7 @@ export default function OrdersBoard({
     </header>
 
     <PartnerOrderAlarmBanner count={activeCount} audioReady={audioReady} onEnableAudio={() => { void prepareAudio(); }} />
-    {message && <p className="orders-message" role="status"><CircleAlert size={17} />{message}</p>}
+    {message && <p className="orders-message" role="status"><CircleAlert size={17} />{message}</p>}{supportOpen && <form className="partner-support-panel" onSubmit={(event) => void submitSupportTicket(event)}><div><p className="section-kicker">SOPORTE OPERATIVO</p><h2>Enviar incidencia a PIKI Support</h2><p>El equipo recibirá el local, tu cuenta y el pedido seleccionado.</p></div><label>Pedido afectado (opcional)<select value={supportForm.orderId} onChange={(event) => setSupportForm((current) => ({ ...current, orderId: event.target.value }))}><option value="">Sin pedido concreto</option>{orders.map((order) => <option key={order._id} value={order._id}>#{order.publicCode || order._id.slice(-6).toUpperCase()} · {order.status}</option>)}</select></label><label>Prioridad<select value={supportForm.priority} onChange={(event) => setSupportForm((current) => ({ ...current, priority: event.target.value }))}><option value="normal">Normal</option><option value="high">Alta</option><option value="urgent">Urgente</option></select></label><label>Asunto<input required minLength={3} maxLength={180} value={supportForm.subject} onChange={(event) => setSupportForm((current) => ({ ...current, subject: event.target.value }))} placeholder="Ej. El rider no aparece en el local" /></label><label>Qué ha ocurrido<textarea required minLength={3} maxLength={4000} rows={4} value={supportForm.description} onChange={(event) => setSupportForm((current) => ({ ...current, description: event.target.value }))} placeholder="Incluye los datos operativos necesarios." /></label><button type="submit" className="support-submit" disabled={supportBusy}><Send size={15} />{supportBusy ? "Enviando…" : "Enviar a soporte"}</button></form>}
 
     <div className="orders-summary" aria-label="Resumen de pedidos">
       <div><span>Pedidos activos</span><strong>{orders.filter((order) => lanes.some((lane) => lane.status === order.status)).length}</strong></div>
