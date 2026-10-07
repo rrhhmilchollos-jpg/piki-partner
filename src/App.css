@@ -91,3 +91,11 @@ body { background:radial-gradient(circle at 90% 0%, rgba(255,215,46,.2), transpa
 
 html, body, #root { max-width: 100%; overflow-x: hidden; }
 @media (max-width: 600px) { .orders-topbar, .orders-page, .orders-heading, .orders-heading-actions { min-width: 0; max-width: 100%; } .orders-heading h1, .orders-heading p, .connection-status span { overflow-wrap: anywhere; } .orders-summary { gap: 8px; } .orders-summary > div { min-width: 0; padding: 13px; } .orders-board { width: 100%; max-width: 100%; overscroll-behavior-x: contain; } .partner-support-panel { width: 100%; min-width: 0; } .partner-support-panel input, .partner-support-panel select, .partner-support-panel textarea { min-width: 0; } }
+
+/* Historial de pedidos: archivo de solo lectura, separado de la operación activa. */
+.archive-board { display: block; }
+.archived-order-card { border-left: 4px solid #b8c4d6; }
+.archive-status { align-self: flex-start; border-radius: 999px; padding: 6px 10px; font-size: 10px; letter-spacing: .08em; font-weight: 850; }
+.archive-status-delivered { color: #287346; background: #e5f7e9; }
+.archive-status-cancelled { color: #9a3e48; background: #fff0f1; }
+.archive-load-more { display: block; margin: 18px auto 0; }

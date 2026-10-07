@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { BarChart3, Bell, BookOpen, ChevronDown, CircleHelp, LogOut, Menu, PackageSearch, Store, X } from "lucide-react";
+import { Archive, BarChart3, Bell, BookOpen, ChevronDown, CircleHelp, LogOut, Menu, PackageSearch, Store, X } from "lucide-react";
 import "./App.css";
 import EmployeeAuthGate from "./EmployeeAuthGate";
 import MenuEditor from "./MenuEditor";
 import MenuAvailability from "./MenuAvailability";
 import OrdersBoard from "./OrdersBoard";
+import ArchivedOrdersBoard from "./ArchivedOrdersBoard";
 import PerformanceView from "./PerformanceView";
 import { apiOrigin, displayRole, hasPermission, normalisePartnerProfile, partnerHeaders, type PartnerLocation, type PartnerProfile } from "./partnerApi";
 import { visiblePartnerViews, type PartnerView } from "./partnerNavigation";
@@ -16,6 +17,7 @@ type View = PartnerView;
 const tokenKey = `piki-${location.hostname}-api-token`;
 const navigation: Array<{ id: View; label: string; icon: typeof Bell }> = [
   { id: "orders", label: "Pedidos", icon: Bell },
+  { id: "history", label: "Historial", icon: Archive },
   { id: "catalog", label: "Carta del restaurante", icon: BookOpen },
   { id: "menu", label: "Disponibilidad", icon: PackageSearch },
   { id: "performance", label: "Rendimiento", icon: BarChart3 },
@@ -183,6 +185,7 @@ function App() {
       <div className="orders-page">
         {!currentView && <div className="orders-loading">Este perfil no tiene permisos operativos para el local seleccionado. Contacta con el administrador de tu cuenta PIKI.</div>}
         {currentView === "orders" && <OrdersBoard token={token} locationId={location.id} canRead={canOrdersRead} canOperate={canOrdersOperate} canCancel={canCancel} onUnauthorized={clearSession} />}
+        {currentView === "history" && <ArchivedOrdersBoard token={token} locationId={location.id} canRead={canOrdersRead} onUnauthorized={clearSession} />}
         {currentView === "catalog" && canMenu && <MenuEditor key={location.id} apiOrigin={apiOrigin} token={token} locationId={location.id} onUnauthorized={clearSession} />}
         {currentView === "menu" && <MenuAvailability token={token} locationId={location.id} canRead={canMenuRead} canEdit={canMenu} onUnauthorized={clearSession} />}
         {currentView === "performance" && <PerformanceView token={token} locationId={location.id} canRead={canMetrics} onUnauthorized={clearSession} />}
