@@ -3,6 +3,7 @@ import { Printer } from "lucide-react";
 import { PartnerOrderAlarmBanner, type PartnerKitchenOrder, usePartnerOrderAlarm } from "./PartnerOrderAlarm";
 import { connectPikiRealtime } from "./realtime";
 import PrintablePartnerTicket from "./PrintablePartnerTicket";
+import { visibleOrderReference } from "./orderReference";
 
 type Order = PartnerKitchenOrder & {
 	publicCode?: string;
@@ -133,11 +134,11 @@ export default function KitchenScreen({ apiOrigin, token, onUnauthorized }: { ap
     {orders.length
       ? <div className="pda-order-grid">{orders.map((order) => <article className="application-row pda-order-card" key={order._id}>
         <div>
-          <strong>Pedido {order.publicCode || order._id}</strong>
+          <strong>Pedido {visibleOrderReference(order.publicCode, order._id)}</strong>
           <span className={`kitchen-status status-${order.status}`}>{labels[order.status] || order.status}</span>
           <small>{new Date(order.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} · {order.deliveryAddress || "Dirección disponible"}</small><small>{isCashOrder(order) ? `CONTRARREEMBOLSO · cobra el Rider al entregar ${(Number(order.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}` : "PAGO ONLINE CONFIRMADO"}</small>
           <ul>{(order.items || []).map((item, index) => <li key={`${order._id}-${index}`}>{item.quantity || 1} × {item.name || "Producto"}</li>)}</ul>
-          {order.status === "ready_for_pickup" && order.pickupQrUrl && <div className="pickup-verification" aria-label="Código único del pedido para autorizar la recogida del rider"><div><strong>Entrega al rider · {order.publicCode || "Pedido"}</strong><span>QR del pedido · muéstralo al rider</span><b>PIN de recogida: {order.pickupPin || "—"}</b><small>Este código pertenece solo a este pedido.</small></div><img src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=4&data=${encodeURIComponent(order.pickupQrUrl)}`} alt={`QR del pedido ${order.publicCode || ""}`} /></div>}
+          {order.status === "ready_for_pickup" && order.pickupQrUrl && <div className="pickup-verification" aria-label="Código único del pedido para autorizar la recogida del rider"><div><strong>Entrega al rider · {visibleOrderReference(order.publicCode, order._id)}</strong><span>QR del pedido · muéstralo al rider</span><b>PIN de recogida: {order.pickupPin || "—"}</b><small>Este código pertenece solo a este pedido.</small></div><img src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=4&data=${encodeURIComponent(order.pickupQrUrl)}`} alt={`QR del pedido ${visibleOrderReference(order.publicCode, order._id)}`} /></div>}
         </div>
         <div className="pda-actions">
           {order.status === "pending" && <button className="primary-button" disabled={busyOrderId === order._id} onClick={() => void move(order._id, "accepted")}>{busyOrderId === order._id ? "Aceptando…" : "Aceptar pedido"}</button>}
