@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Printer } from "lucide-react";
 import { PartnerOrderAlarmBanner, type PartnerKitchenOrder, usePartnerOrderAlarm } from "./PartnerOrderAlarm";
 import { connectPikiRealtime } from "./realtime";
+import PrintablePartnerTicket from "./PrintablePartnerTicket";
 
 type Order = PartnerKitchenOrder & {
 	publicCode?: string;
@@ -147,20 +148,6 @@ export default function KitchenScreen({ apiOrigin, token, onUnauthorized }: { ap
         </div>
       </article>)}</div>
       : <p className="empty-copy">No hay pedidos pendientes en cocina.</p>}
-    {printingOrder && <div className="thermal-ticket" aria-hidden="true">
-      <header><strong>{printingOrder.restaurant?.name || "ESTABLECIMIENTO PARTNER"}</strong><span>TICKET OFICIAL DE PEDIDO · PIKI DELIVERY</span>{printingOrder.restaurant?.address && <span>{printingOrder.restaurant.address}</span>}{printingOrder.restaurant?.phone && <span>{printingOrder.restaurant.phone}</span>}</header>
-      <div className="thermal-rule" />
-      <section className="thermal-order-id"><b>#{printingOrder.publicCode || printingOrder._id}</b><span>{new Date(printingOrder.createdAt).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}</span></section>
-      <p className="thermal-status">{labels[printingOrder.status] || printingOrder.status}</p>
-      <p className="thermal-line"><span>Cliente</span><b>{printingOrder.customer?.name || "Cliente PIKI"}</b></p>
-      <p className="thermal-line"><span>Dirección</span><b>{printingOrder.deliveryAddress || "—"}</b></p>
-      <div className="thermal-rule" />
-      <ul>{(printingOrder.items || []).map((item, index) => { const unitPriceCents = item.priceCents ?? item.unitPriceCents; return <li key={`${printingOrder._id}-ticket-${index}`}><span>{item.quantity || 1} × {item.name || "Producto"}{(item.selectedOptions || []).map((option, optionIndex) => <small key={`${printingOrder._id}-ticket-${index}-option-${optionIndex}`}>+ {option.groupName ? `${option.groupName}: ` : ""}{option.optionName || "Opción"}</small>)}</span>{unitPriceCents != null && <b>{((unitPriceCents * (item.quantity || 1)) / 100).toFixed(2).replace(".", ",")} €</b>}</li>; })}</ul>
-      <div className="thermal-rule" />
-      <p className="thermal-line"><span>Pago</span><b>{isCashOrder(printingOrder) ? "EFECTIVO · cobra Rider" : "PAGADO ONLINE"}</b></p>
-      <p className="thermal-line"><span>Total</span><b>{(Number(printingOrder.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}</b></p>
-      {printingOrder.pickupPin && <><div className="thermal-rule" /><p className="thermal-pickup-label">ENTREGA AL RIDER</p><p className="thermal-pin">{printingOrder.pickupPin}</p><p className="thermal-help">Muestra este PIN o el QR de recogida cuando el pedido esté listo.</p></>}
-      <footer>Gracias por colaborar con PIKI<br />partners.pikidelivery.com</footer>
-    </div>}
+    {printingOrder && <PrintablePartnerTicket order={printingOrder} />}
   </section>;
 }

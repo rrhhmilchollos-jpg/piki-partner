@@ -99,3 +99,31 @@ html, body, #root { max-width: 100%; overflow-x: hidden; }
 .archive-status-delivered { color: #287346; background: #e5f7e9; }
 .archive-status-cancelled { color: #9a3e48; background: #fff0f1; }
 .archive-load-more { display: block; margin: 18px auto 0; }
+
+.piki-thermal-ticket { display: none; }
+
+@media print {
+  @page { size: 58mm auto; margin: 3mm; }
+  body { width: 52mm; margin: 0 !important; padding: 0 !important; color: #000 !important; background: #fff !important; font-family: Arial, sans-serif !important; }
+  #root > * { display: none !important; }
+  #root .piki-thermal-ticket { display: block !important; width: 52mm !important; color: #000 !important; background: #fff !important; font-size: 10px !important; line-height: 1.35 !important; }
+  .piki-thermal-ticket header { display: grid !important; gap: 2px !important; text-align: center !important; }
+  .piki-thermal-ticket header strong { font-size: 13px !important; }
+  .piki-thermal-ticket header span { font-size: 8px !important; }
+  .piki-thermal-ticket .thermal-rule { margin: 8px 0 !important; border-top: 1px dashed #000 !important; }
+  .piki-thermal-ticket .thermal-order-id { display: grid !important; gap: 2px !important; }
+  .piki-thermal-ticket .thermal-order-id b { font-size: 12px !important; }
+  .piki-thermal-ticket .thermal-order-id span, .piki-thermal-ticket .thermal-status { font-size: 9px !important; }
+  .piki-thermal-ticket .thermal-status { margin: 5px 0 !important; font-weight: 700 !important; text-transform: uppercase !important; }
+  .piki-thermal-ticket .thermal-line { display: flex !important; align-items: flex-start !important; justify-content: space-between !important; gap: 7px !important; margin: 4px 0 !important; }
+  .piki-thermal-ticket .thermal-line span { flex: 0 0 12mm !important; }
+  .piki-thermal-ticket .thermal-line b { flex: 1 !important; overflow-wrap: anywhere !important; text-align: right !important; }
+  .piki-thermal-ticket ul { display: grid !important; gap: 5px !important; margin: 0 !important; padding: 0 !important; list-style: none !important; }
+  .piki-thermal-ticket li { display: flex !important; justify-content: space-between !important; gap: 6px !important; }
+  .piki-thermal-ticket li > span { display: grid !important; min-width: 0 !important; }
+  .piki-thermal-ticket li small { font-size: 8px !important; }
+  .piki-thermal-ticket .thermal-pickup-label { margin: 0 !important; text-align: center !important; font-size: 8px !important; font-weight: 700 !important; }
+  .piki-thermal-ticket .thermal-pin { margin: 3px 0 !important; text-align: center !important; font-size: 16px !important; font-weight: 800 !important; letter-spacing: 1.2px !important; }
+  .piki-thermal-ticket .thermal-help { margin: 0 !important; text-align: center !important; font-size: 8px !important; }
+  .piki-thermal-ticket footer { margin-top: 10px !important; text-align: center !important; font-size: 8px !important; }
+}
