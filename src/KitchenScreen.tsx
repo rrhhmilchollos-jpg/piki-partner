@@ -7,7 +7,7 @@ type Order = PartnerKitchenOrder & {
 	publicCode?: string;
   createdAt: string;
   deliveryAddress?: string;
-  items?: { name?: string; quantity?: number; priceCents?: number }[];
+  items?: { name?: string; quantity?: number; priceCents?: number; unitPriceCents?: number; selectedOptions?: { groupName?: string; optionName?: string; unitPriceCents?: number }[] }[];
   totalCents?: number;
   pickupQrUrl?: string | null;
   pickupPin?: string | null;
@@ -74,6 +74,23 @@ export default function KitchenScreen({ apiOrigin, token, onUnauthorized }: { ap
     },
   }), [apiOrigin, token, load, notifyPaidOrder]);
 
+  useEffect(() => {
+    if (!printingOrder) return;
+    let cancelled = false;
+    const firstFrame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (!cancelled) window.print();
+      });
+    });
+    const closeTicket = () => setPrintingOrder(null);
+    window.addEventListener("afterprint", closeTicket, { once: true });
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(firstFrame);
+      window.removeEventListener("afterprint", closeTicket);
+    };
+  }, [printingOrder]);
+
   async function move(id: string, status: string) {
     if (busyOrderId) return;
     setBusyOrderId(id);
@@ -99,7 +116,6 @@ export default function KitchenScreen({ apiOrigin, token, onUnauthorized }: { ap
 
   function printThermalTicket(order: Order) {
     setPrintingOrder(order);
-    window.setTimeout(() => window.print(), 40);
   }
 
   return <section className="application-table" aria-label="Pantalla de cocina PIKI">
@@ -139,7 +155,7 @@ export default function KitchenScreen({ apiOrigin, token, onUnauthorized }: { ap
       <p className="thermal-line"><span>Cliente</span><b>{printingOrder.customer?.name || "Cliente PIKI"}</b></p>
       <p className="thermal-line"><span>Dirección</span><b>{printingOrder.deliveryAddress || "—"}</b></p>
       <div className="thermal-rule" />
-      <ul>{(printingOrder.items || []).map((item, index) => <li key={`${printingOrder._id}-ticket-${index}`}><span>{item.quantity || 1} × {item.name || "Producto"}</span>{item.priceCents != null && <b>{((item.priceCents * (item.quantity || 1)) / 100).toFixed(2).replace(".", ",")} €</b>}</li>)}</ul>
+      <ul>{(printingOrder.items || []).map((item, index) => { const unitPriceCents = item.priceCents ?? item.unitPriceCents; return <li key={`${printingOrder._id}-ticket-${index}`}><span>{item.quantity || 1} × {item.name || "Producto"}{(item.selectedOptions || []).map((option, optionIndex) => <small key={`${printingOrder._id}-ticket-${index}-option-${optionIndex}`}>+ {option.groupName ? `${option.groupName}: ` : ""}{option.optionName || "Opción"}</small>)}</span>{unitPriceCents != null && <b>{((unitPriceCents * (item.quantity || 1)) / 100).toFixed(2).replace(".", ",")} €</b>}</li>; })}</ul>
       <div className="thermal-rule" />
       <p className="thermal-line"><span>Pago</span><b>{isCashOrder(printingOrder) ? "EFECTIVO · cobra Rider" : "PAGADO ONLINE"}</b></p>
       <p className="thermal-line"><span>Total</span><b>{(Number(printingOrder.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}</b></p>
