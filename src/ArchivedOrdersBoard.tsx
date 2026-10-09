@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Archive, RefreshCw } from "lucide-react";
 import { apiOrigin, partnerHeaders } from "./partnerApi";
+import { visibleOrderReference } from "./orderReference";
 
 type ArchivedOrder = {
   _id: string;
@@ -61,7 +62,7 @@ export default function ArchivedOrdersBoard({ token, locationId, canRead, onUnau
     {loading && !orders.length ? <div className="orders-loading">Cargando archivo…</div> : orders.length ? <div className="orders-board archive-board">
       <section className="order-lane lane-archived" aria-label="Pedidos archivados"><header className="lane-header"><div><h2>Completados y cerrados<span>{orders.length}</span></h2><p>Solo lectura · los pedidos no se pueden modificar</p></div></header>
         <div className="lane-cards">{orders.map((order) => <article key={order._id} className="order-card archived-order-card">
-          <div className="order-card-top"><div><span className="order-code">#{order.publicCode || order._id.slice(-6).toUpperCase()}</span><small>{order.customer?.name || "Cliente PIKI"}</small><small>{dateLabel(order)}</small></div><strong className={`archive-status archive-status-${order.status}`}>{order.status === "delivered" ? "ENTREGADO" : "CANCELADO"}</strong></div>
+          <div className="order-card-top"><div><span className="order-code">{visibleOrderReference(order.publicCode, order._id)}</span><small>{order.customer?.name || "Cliente PIKI"}</small><small>{dateLabel(order)}</small></div><strong className={`archive-status archive-status-${order.status}`}>{order.status === "delivered" ? "ENTREGADO" : "CANCELADO"}</strong></div>
           <ul className="order-items">{(order.items ?? []).map((item, index) => <li key={`${order._id}-${index}`}><b>{item.quantity ?? 1}×</b><span><strong>{item.name || "Producto"}</strong></span></li>)}</ul>
           {order.deliveryAddress && <p className="order-address"><span>Dirección</span>{order.deliveryAddress}</p>}
           <div className="order-meta"><span>Importe final</span><strong>{money(order.totalCents)}</strong></div>
