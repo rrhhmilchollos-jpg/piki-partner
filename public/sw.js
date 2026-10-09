@@ -1,4 +1,4 @@
-const BUILD_ID = "e4fe63c3e466";
+const BUILD_ID = "277bcbe6b570";
 const CACHE_PREFIX = "piki-partner-";
 const CACHE_NAME = `${CACHE_PREFIX}${BUILD_ID}`;
 const APP_SHELL = ["/","/manifest.json","/piki-rider-bee-192.png","/piki-rider-bee-512.png"];
@@ -8,11 +8,9 @@ self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
     await Promise.allSettled(APP_SHELL.map((asset) => cache.add(asset)));
-    await self.skipWaiting();
   })());
 });
 
-/* PIKI_PWA_MIGRATION_2026_09 */
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
@@ -29,7 +27,7 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin || CONTROL_PATHS.has(url.pathname) || url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/") || request.headers.has("authorization")) return;
+  if (url.origin !== self.location.origin || CONTROL_PATHS.has(url.pathname) || url.pathname.startsWith("/piki-api/") || url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/") || request.headers.has("authorization")) return;
   if (request.mode === "navigate") {
     event.respondWith(fetch(request).catch(async () => (await caches.match("/")) || Response.error()));
     return;

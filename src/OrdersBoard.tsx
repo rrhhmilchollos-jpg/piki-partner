@@ -4,6 +4,7 @@ import { PartnerOrderAlarmBanner, type PartnerKitchenOrder, usePartnerOrderAlarm
 import { apiOrigin, partnerHeaders } from "./partnerApi";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
 import { connectPikiRealtime } from "./realtime";
+import PrintablePartnerTicket from "./PrintablePartnerTicket";
 
 /* oxlint-disable react/set-state-in-effect -- effects synchronise external partner order data. */
 
@@ -89,6 +90,7 @@ export default function OrdersBoard({
   const [supportOpen, setSupportOpen] = useState(false);
   const [supportBusy, setSupportBusy] = useState(false);
   const [supportForm, setSupportForm] = useState({ orderId: "", priority: "normal", subject: "", description: "" });
+  const [printingOrder, setPrintingOrder] = useState<PartnerOrder | null>(null);
   const { activeCount, audioReady, prepareAudio, reconcileKitchenOrders, notifyPaidOrder, resolveOrder } = usePartnerOrderAlarm();
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
   usePwaUpdateBlocker("partner-order-operation", Boolean(busyOrderId) || supportBusy || supportOpen);
@@ -150,6 +152,23 @@ export default function OrdersBoard({
     });
   }, [canRead, locationId, load, notifyPaidOrder, token]);
 
+  useEffect(() => {
+    if (!printingOrder) return;
+    let cancelled = false;
+    const firstFrame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (!cancelled) window.print();
+      });
+    });
+    const closeTicket = () => setPrintingOrder(null);
+    window.addEventListener("afterprint", closeTicket, { once: true });
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(firstFrame);
+      window.removeEventListener("afterprint", closeTicket);
+    };
+  }, [printingOrder]);
+
   const move = async (order: PartnerOrder, status: OrderStatus | "cancelled") => {
     if (busyOrderId || !canRead || !canOperate) return;
     setBusyOrderId(order._id);
@@ -178,7 +197,7 @@ export default function OrdersBoard({
       setMessage("Antes de imprimir, acepta el pedido para avisar al Rider del plazo máximo de 10 minutos.");
       return;
     }
-    window.print();
+    setPrintingOrder(order);
   };
   const submitSupportTicket = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); if (supportBusy) return; setSupportBusy(true); try { const response = await fetch(`${apiOrigin}/api/v1/partners/support/tickets`, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ ...supportForm, orderId: supportForm.orderId || undefined }) }); const payload = await response.json().catch(() => ({})) as { error?: string; message?: string; ticket?: { ticketNumber?: string } }; if (response.status === 401) { onUnauthorized(); return; } if (!response.ok) throw new Error(payload.message || payload.error || "No se pudo enviar la incidencia."); setSupportForm({ orderId: "", priority: "normal", subject: "", description: "" }); setSupportOpen(false); setMessage(`Incidencia ${payload.ticket?.ticketNumber || "creada"}. Soporte ya puede atenderla.`); } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo enviar la incidencia."); } finally { setSupportBusy(false); } };
   return <section className="orders-workspace" aria-label="Pedidos PIKI Partner Orders">
@@ -234,5 +253,6 @@ export default function OrdersBoard({
         </section>;
       })}
     </div>}
+    {printingOrder && <PrintablePartnerTicket order={printingOrder} />}
   </section>;
 }
