@@ -17,6 +17,7 @@ import {
 import "./MenuEditor.css";
 import { partnerHeaders } from "./partnerApi";
 import { bytesToBase64, MENU_IMAGE_ACCEPT, prepareMenuImage, sha256File, validateMenuFile, MAX_MENU_IMAGE_BYTES } from "./menuAsset";
+import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
 
 type Modifier = {
   id: string;
@@ -95,6 +96,7 @@ export default function MenuEditor({
   const [assetsLoading, setAssetsLoading] = useState(true);
   const [filter, setFilter] = useState("Todos");
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
+  usePwaUpdateBlocker("partner-menu-editor", Boolean(draft) || saving || uploading);
   const uploadAsset = async (file: File, kind: "menu_image" | "menu_file") => {
     setUploading(true);
     setMessage(kind === "menu_file" ? "Comprobando y analizando el PDF…" : "Optimizando y analizando la imagen…");
