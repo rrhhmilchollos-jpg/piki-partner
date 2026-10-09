@@ -9,6 +9,7 @@ import ArchivedOrdersBoard from "./ArchivedOrdersBoard";
 import PerformanceView from "./PerformanceView";
 import { apiOrigin, displayRole, hasPermission, normalisePartnerProfile, partnerHeaders, type PartnerLocation, type PartnerProfile } from "./partnerApi";
 import { visiblePartnerViews, type PartnerView } from "./partnerNavigation";
+import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
 import { partnerSessionIssue, shouldClearPartnerSession } from "./sessionRecovery";
 
 /* oxlint-disable react/set-state-in-effect -- effects reconcile authenticated profile and active location. */
@@ -37,6 +38,7 @@ function StoreStatusControl({ token, location, enabled, onUnauthorized }: { toke
   const [open, setOpen] = useState(location.isOpen ?? true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  usePwaUpdateBlocker("partner-store-status", busy);
 
   useEffect(() => { setOpen(location.isOpen ?? true); setMessage(""); }, [location.id, location.isOpen]);
 

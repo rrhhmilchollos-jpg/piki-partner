@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { BellRing, ChevronRight, CircleAlert, Clock3, MessageSquare, Printer, RefreshCw, Send, Wifi, WifiOff } from "lucide-react";
 import { PartnerOrderAlarmBanner, type PartnerKitchenOrder, usePartnerOrderAlarm } from "./PartnerOrderAlarm";
 import { apiOrigin, partnerHeaders } from "./partnerApi";
+import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
 import { connectPikiRealtime } from "./realtime";
 
 /* oxlint-disable react/set-state-in-effect -- effects synchronise external partner order data. */
@@ -90,6 +91,7 @@ export default function OrdersBoard({
   const [supportForm, setSupportForm] = useState({ orderId: "", priority: "normal", subject: "", description: "" });
   const { activeCount, audioReady, prepareAudio, reconcileKitchenOrders, notifyPaidOrder, resolveOrder } = usePartnerOrderAlarm();
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
+  usePwaUpdateBlocker("partner-order-operation", Boolean(busyOrderId) || supportBusy || supportOpen);
 
   const load = useCallback(async () => {
     if (!canRead) {
