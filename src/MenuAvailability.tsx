@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ChefHat, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
 import { apiOrigin, partnerHeaders } from "./partnerApi";
+import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
 
 /* oxlint-disable react/set-state-in-effect -- effects synchronise the remote partner menu. */
 
@@ -28,6 +29,7 @@ export default function MenuAvailability({ token, locationId, canRead, canEdit, 
   const [saving, setSaving] = useState("");
   const [message, setMessage] = useState("");
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
+  usePwaUpdateBlocker("partner-menu-availability", Boolean(saving));
 
   const load = useCallback(async () => {
     if (!canRead) {

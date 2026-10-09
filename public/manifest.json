@@ -2,7 +2,7 @@
   "id": "/",
   "name": "PIKI Partner Orders",
   "short_name": "PIKI Orders",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Aplicación operativa de PIKI para pedidos, disponibilidad y rendimiento del establecimiento.",
   "start_url": "/",
   "scope": "/",

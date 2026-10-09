@@ -9,7 +9,9 @@ const version = process.env.PIKI_RELEASE_VERSION || pkg.version;
 const surface = "partner";
 if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) throw new Error(`PIKI_RELEASE_VERSION inválida: ${version}`);
 function buildId() {
-  const env = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA;
+  // CI can pass the final deploy/commit build ID before this script runs;
+  // local builds fall back to the current checkout for reproducibility.
+  const env = process.env.PIKI_RELEASE_BUILD_ID || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA;
   if (env) return env.slice(0, 12);
   try { return execFileSync("git", ["rev-parse", "--short=12", "HEAD"], { cwd: root, encoding: "utf8" }).trim(); }
   catch { return `local-${version}`; }
