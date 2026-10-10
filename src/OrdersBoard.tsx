@@ -27,6 +27,7 @@ export type PartnerOrder = PartnerKitchenOrder & {
 };
 
 type OrderStatus = "pending" | "accepted" | "preparing" | "ready_for_pickup";
+type OrderFilter = "all" | OrderStatus;
 
 type Lane = {
   status: OrderStatus;
@@ -36,11 +37,13 @@ type Lane = {
 };
 
 const lanes: Lane[] = [
-  { status: "pending", label: "Nuevos", hint: "Requieren aceptación", action: { label: "Aceptar", to: "accepted" } },
-  { status: "accepted", label: "Aceptados", hint: "Confirma preparación", action: { label: "Preparar", to: "preparing" } },
-  { status: "preparing", label: "En preparación", hint: "Cocina en marcha", action: { label: "Marcar listo", to: "ready_for_pickup" } },
-  { status: "ready_for_pickup", label: "Listos", hint: "Esperando rider" },
+  { status: "pending", label: "Nuevos", hint: "Revisa y acepta", action: { label: "Aceptar pedido", to: "accepted" } },
+  { status: "accepted", label: "Aceptados", hint: "Pendientes de cocina", action: { label: "Iniciar preparación", to: "preparing" } },
+  { status: "preparing", label: "En preparación", hint: "Cocina en marcha", action: { label: "Marcar como listo", to: "ready_for_pickup" } },
+  { status: "ready_for_pickup", label: "Listos", hint: "Esperando al Rider" },
 ];
+
+const filterLabels: Record<OrderFilter, string> = { all: "Todos", pending: "Nuevos", accepted: "Aceptados", preparing: "En preparación", ready_for_pickup: "Listos" };
 
 function isCashOrder(order: PartnerOrder): boolean {
   return Boolean(order.cashDueAtDelivery || order.paymentMethod === "cash");
@@ -90,6 +93,7 @@ export default function OrdersBoard({
   const [busyOrderId, setBusyOrderId] = useState("");
   const [connected, setConnected] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
+  const [activeFilter, setActiveFilter] = useState<OrderFilter>("all");
   const [supportOpen, setSupportOpen] = useState(false);
   const [supportBusy, setSupportBusy] = useState(false);
   const [supportForm, setSupportForm] = useState({ orderId: "", priority: "normal", subject: "", description: "" });
@@ -203,6 +207,7 @@ export default function OrdersBoard({
     setPrintingOrder(order);
   };
   const submitSupportTicket = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); if (supportBusy) return; setSupportBusy(true); try { const response = await fetch(`${apiOrigin}/api/v1/partners/support/tickets`, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ ...supportForm, orderId: supportForm.orderId || undefined }) }); const payload = await response.json().catch(() => ({})) as { error?: string; message?: string; ticket?: { ticketNumber?: string } }; if (response.status === 401) { onUnauthorized(); return; } if (!response.ok) throw new Error(payload.message || payload.error || "No se pudo enviar la incidencia."); setSupportForm({ orderId: "", priority: "normal", subject: "", description: "" }); setSupportOpen(false); setMessage(`Incidencia ${payload.ticket?.ticketNumber || "creada"}. Soporte ya puede atenderla.`); } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo enviar la incidencia."); } finally { setSupportBusy(false); } };
+  const counts = useMemo(() => ({ all: orders.length, pending: orders.filter((order) => order.status === "pending").length, accepted: orders.filter((order) => order.status === "accepted").length, preparing: orders.filter((order) => order.status === "preparing").length, ready_for_pickup: orders.filter((order) => order.status === "ready_for_pickup").length }), [orders]);
   return <section className={`orders-workspace ${pdaMode ? "pda-orders-workspace" : ""}`} aria-label={pdaMode ? "PDA operativa PIKI Partner" : "Pedidos PIKI Partner Orders"}>
     <header className="orders-heading">
       <div>
@@ -217,6 +222,8 @@ export default function OrdersBoard({
       </div></div>
     </header>
 
+    <div className="partner-operation-strip"><div><span className="operation-dot" /> <strong>Operación activa</strong><small>Los pedidos nuevos aparecen aquí automáticamente</small></div><strong>{counts.all} {counts.all === 1 ? "pedido activo" : "pedidos activos"}</strong></div>
+    <div className="order-filter-tabs" role="tablist" aria-label="Filtrar pedidos">{(Object.keys(filterLabels) as OrderFilter[]).map((filter) => <button key={filter} type="button" role="tab" aria-selected={activeFilter === filter} className={activeFilter === filter ? "is-active" : ""} onClick={() => setActiveFilter(filter)}>{filterLabels[filter]}<span>{counts[filter]}</span></button>)}</div>
     <PartnerOrderAlarmBanner count={activeCount} audioReady={audioReady} onEnableAudio={() => { void prepareAudio(); }} />
     {message && <p className="orders-message" role="status"><CircleAlert size={17} />{message}</p>}{supportOpen && <form className="partner-support-panel" onSubmit={(event) => void submitSupportTicket(event)}><div><p className="section-kicker">SOPORTE OPERATIVO</p><h2>Enviar incidencia a PIKI Support</h2><p>El equipo recibirá el local, tu cuenta y el pedido seleccionado.</p></div><label>Pedido afectado (opcional)<select value={supportForm.orderId} onChange={(event) => setSupportForm((current) => ({ ...current, orderId: event.target.value }))}><option value="">Sin pedido concreto</option>{orders.map((order) => <option key={order._id} value={order._id}>{visibleOrderReference(order.publicCode, order._id)} · {order.status}</option>)}</select></label><label>Prioridad<select value={supportForm.priority} onChange={(event) => setSupportForm((current) => ({ ...current, priority: event.target.value }))}><option value="normal">Normal</option><option value="high">Alta</option><option value="urgent">Urgente</option></select></label><label>Asunto<input required minLength={3} maxLength={180} value={supportForm.subject} onChange={(event) => setSupportForm((current) => ({ ...current, subject: event.target.value }))} placeholder="Ej. El rider no aparece en el local" /></label><label>Qué ha ocurrido<textarea required minLength={3} maxLength={4000} rows={4} value={supportForm.description} onChange={(event) => setSupportForm((current) => ({ ...current, description: event.target.value }))} placeholder="Incluye los datos operativos necesarios." /></label><button type="submit" className="support-submit" disabled={supportBusy}><Send size={15} />{supportBusy ? "Enviando…" : "Enviar a soporte"}</button></form>}
 
@@ -228,13 +235,13 @@ export default function OrdersBoard({
 
     {loading ? <div className="orders-loading">Cargando operación…</div> : <div className="orders-board">
       {lanes.map((lane) => {
-        const laneOrders = orders.filter((order) => order.status === lane.status);
+        const laneOrders = orders.filter((order) => order.status === lane.status && (activeFilter === "all" || activeFilter === lane.status));
         return <section key={lane.status} className={`order-lane lane-${lane.status}`} aria-label={lane.label}>
           <header className="lane-header"><div><h2>{lane.label}<span>{laneOrders.length}</span></h2><p>{lane.hint}</p></div></header>
           <div className="lane-cards">
             {laneOrders.map((order) => <article key={order._id} className={`order-card ${lane.status === "pending" ? "is-new" : ""}`}>
               <div className="order-card-top">
-                <div><span className="order-code">{visibleOrderReference(order.publicCode, order._id)}</span><small>{order.customer?.name || "Cliente PIKI"}</small><small>Recibido a las {orderTime(order.createdAt)}</small></div>
+                <div><div className="order-card-status"><span className="status-dot" />{filterLabels[lane.status]}</div><span className="order-code">{visibleOrderReference(order.publicCode, order._id)}</span><small>{order.customer?.name || "Cliente PIKI"}</small><small>Recibido a las {orderTime(order.createdAt)}</small></div>
                 <div className={`countdown ${orderDeadline(order) <= now ? "is-late" : ""}`}><Clock3 size={15} /><b>{countdown(order, now)}</b></div>
               </div>
               <ul className="order-items">{(order.items ?? []).map((item, index) => <li key={`${order._id}-${index}`}><b>{item.quantity ?? 1}×</b><span><strong>{item.name || "Producto"}</strong>{item.selectedOptions?.length ? <small>{item.selectedOptions.map((option) => option.optionName).filter(Boolean).join(" · ")}</small> : null}</span></li>)}</ul>
@@ -251,7 +258,7 @@ export default function OrdersBoard({
               </div>
               {canCancel && lane.status !== "ready_for_pickup" && <button type="button" className="incident-control" disabled={busyOrderId === order._id} onClick={() => void move(order, "cancelled")}>Registrar incidencia</button>}
             </article>)}
-            {!laneOrders.length && <div className="lane-empty"><BellRing size={19} /><span>{lane.status === "pending" ? "Sin pedidos nuevos" : "Nada por hacer aquí"}</span></div>}
+            {!laneOrders.length && <div className="lane-empty"><BellRing size={19} /><span>{activeFilter !== "all" ? `No hay pedidos ${filterLabels[activeFilter].toLowerCase()}` : lane.status === "pending" ? "Sin pedidos nuevos" : "Nada por hacer aquí"}</span></div>}
           </div>
         </section>;
       })}
