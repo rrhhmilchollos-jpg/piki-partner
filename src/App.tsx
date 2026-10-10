@@ -173,6 +173,10 @@ function App() {
   return <div className="orders-app-shell">
     <aside className={`orders-sidebar ${menuOpen ? "is-visible" : ""}`} aria-label="Navegación de PIKI Partner Orders">
       <div className="orders-brand"><img src="/piki-rider-bee-192.png" alt="Rider abeja PIKI" /><div><strong>PIKI</strong><span>PARTNER ORDERS</span><small className="brand-vibe">Cada pedido cuenta.</small></div><button type="button" className="mobile-close" onClick={() => setMenuOpen(false)} aria-label="Cerrar menú"><X size={20} /></button></div>
+      <div className="partner-establishment-card" aria-label={`Establecimiento activo: ${location.name}`}>
+        <span className="partner-establishment-icon"><Store size={18} /></span>
+        <div><small>ESTABLECIMIENTO ACTIVO</small><strong>{location.name}</strong><span>{location.address || "Panel operativo del Partner"}</span></div>
+      </div>
       <nav>{availableNavigation.map(({ id, label, icon: Icon }) => <button type="button" key={id} className={currentView === id ? "active" : ""} onClick={() => { setActiveView(id); setMenuOpen(false); }}><Icon size={20} /><span>{label}</span></button>)}</nav>
       <div className="sidebar-help"><CircleHelp size={18} /><span><b>¿Necesitas ayuda?</b><small>Soporte PIKI para Partners</small></span></div>
     </aside>
@@ -182,7 +186,7 @@ function App() {
       <header className="orders-topbar">
         <button type="button" className="mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Abrir menú"><Menu size={22} /></button>
         <div className="location-select"><Store size={18} /><div><span>LOCAL ACTIVO</span>{profile.locations.length > 1 ? <label><select value={location.id} onChange={(event) => setActiveLocationId(event.target.value)} aria-label="Seleccionar local">{profile.locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={16} /></label> : <strong>{location.name}</strong>}</div></div>
-        <div className="topbar-right"><StoreStatusControl token={token} location={location} enabled={canStore} onUnauthorized={clearSession} /><div className="profile-chip"><span>{profile.name.slice(0, 1).toUpperCase()}</span><div><b>{profile.name}</b><small>{displayRole(role)}</small></div><button type="button" onClick={clearSession} aria-label="Cerrar sesión"><LogOut size={17} /></button></div></div>
+        <div className="topbar-right"><StoreStatusControl token={token} location={location} enabled={canStore} onUnauthorized={clearSession} /><div className="profile-chip" aria-label={`Perfil ${profile.name} en ${location.name}`}><span>{location.name.slice(0, 1).toUpperCase()}</span><div><b>{location.name}</b><small>{profile.name} · {displayRole(role)}</small></div><button type="button" onClick={clearSession} aria-label="Cerrar sesión"><LogOut size={17} /></button></div></div>
       </header>
       <div className="orders-page">
         {!currentView && <div className="orders-loading">Este perfil no tiene permisos operativos para el local seleccionado. Contacta con el administrador de tu cuenta PIKI.</div>}
