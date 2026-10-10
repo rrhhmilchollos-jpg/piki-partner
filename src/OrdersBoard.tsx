@@ -73,6 +73,7 @@ export default function OrdersBoard({
   canRead,
   canOperate,
   canCancel,
+  pdaMode = false,
   onUnauthorized,
 }: {
   token: string;
@@ -80,6 +81,7 @@ export default function OrdersBoard({
   canRead: boolean;
   canOperate: boolean;
   canCancel: boolean;
+  pdaMode?: boolean;
   onUnauthorized: () => void;
 }) {
   const [orders, setOrders] = useState<PartnerOrder[]>([]);
@@ -201,12 +203,12 @@ export default function OrdersBoard({
     setPrintingOrder(order);
   };
   const submitSupportTicket = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); if (supportBusy) return; setSupportBusy(true); try { const response = await fetch(`${apiOrigin}/api/v1/partners/support/tickets`, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ ...supportForm, orderId: supportForm.orderId || undefined }) }); const payload = await response.json().catch(() => ({})) as { error?: string; message?: string; ticket?: { ticketNumber?: string } }; if (response.status === 401) { onUnauthorized(); return; } if (!response.ok) throw new Error(payload.message || payload.error || "No se pudo enviar la incidencia."); setSupportForm({ orderId: "", priority: "normal", subject: "", description: "" }); setSupportOpen(false); setMessage(`Incidencia ${payload.ticket?.ticketNumber || "creada"}. Soporte ya puede atenderla.`); } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo enviar la incidencia."); } finally { setSupportBusy(false); } };
-  return <section className="orders-workspace" aria-label="Pedidos PIKI Partner Orders">
+  return <section className={`orders-workspace ${pdaMode ? "pda-orders-workspace" : ""}`} aria-label={pdaMode ? "PDA operativa PIKI Partner" : "Pedidos PIKI Partner Orders"}>
     <header className="orders-heading">
       <div>
-        <p className="section-kicker">OPERACIÓN EN VIVO</p>
-        <h1>Pedidos</h1>
-        <p>Gestiona cada comanda sin perder el ritmo del local.</p>
+        <p className="section-kicker">{pdaMode ? "PDA · OPERACIÓN EN VIVO" : "OPERACIÓN EN VIVO"}</p>
+        <h1>{pdaMode ? "Pedidos del establecimiento" : "Pedidos"}</h1>
+        <p>{pdaMode ? "Acepta, prepara y entrega cada pedido desde una sola pantalla." : "Gestiona cada comanda sin perder el ritmo del local."}</p>
       </div>
       <div className="orders-heading-actions"><button type="button" className="support-trigger" onClick={() => setSupportOpen((current) => !current)}><MessageSquare size={16} /> {supportOpen ? "Cerrar soporte" : "Contactar con soporte"}</button><div className={`connection-status ${connected ? "is-live" : ""}`} aria-live="polite">
         {connected ? <Wifi size={16} /> : <WifiOff size={16} />}

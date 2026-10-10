@@ -1,8 +1,8 @@
-const BUILD_ID = "af0e1ea2c9ba";
+const BUILD_ID = "0b66f520f576";
 const CACHE_PREFIX = "piki-partner-";
 const CACHE_NAME = `${CACHE_PREFIX}${BUILD_ID}`;
 const APP_SHELL = ["/","/manifest.json","/piki-rider-bee-192.png","/piki-rider-bee-512.png"];
-const CONTROL_PATHS = new Set(["/sw.js", "/release.json", "/manifest.json"]);
+const CONTROL_PATHS = new Set(["/sw.js", "/release.json", "/manifest.json", "/manifest-pda.json"]);
 
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {

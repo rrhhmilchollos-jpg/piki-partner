@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/webp" href="/piki-favicon.webp" />
     <link rel="apple-touch-icon" href="/piki-rider-bee-192.png" />
-    <link rel="manifest" href="/manifest.json" />
+    <link id="pwa-manifest" rel="manifest" href="/manifest.json" />
+    <script>if (location.hostname.startsWith("partners-pda.")) { document.getElementById("pwa-manifest").setAttribute("href", "/manifest-pda.json"); document.title = "PIKI Partner PDA"; }</script>
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
