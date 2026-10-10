@@ -9,6 +9,7 @@ import {
   Plus,
   Save,
   ShieldCheck,
+  Sparkles,
   Upload,
 
   Trash2,
@@ -49,6 +50,16 @@ type Item = {
   available: boolean;
   vegetarian: boolean;
   popular: boolean;
+};
+type ImportDraft = {
+  id: string;
+  sourceFileName: string;
+  extractionMethod: "pdf-text" | "ocr";
+  extractedLines: number;
+  warnings: string[];
+  textPreview: string;
+  items: Item[];
+  status: "draft" | "published" | "rejected";
 };
 const blank = (): Item => ({
   id: `item-${Date.now()}`,
@@ -94,6 +105,8 @@ export default function MenuEditor({
   const [uploading, setUploading] = useState(false);
   const [assets, setAssets] = useState<MenuAsset[]>([]);
   const [assetsLoading, setAssetsLoading] = useState(true);
+  const [importDraft, setImportDraft] = useState<ImportDraft | null>(null);
+  const [importing, setImporting] = useState(false);
   const [filter, setFilter] = useState("Todos");
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
   usePwaUpdateBlocker("partner-menu-editor", Boolean(draft) || saving || uploading);
@@ -172,6 +185,50 @@ export default function MenuEditor({
       setAssetsLoading(false);
     }
   }, [apiOrigin, headers, onUnauthorized]);
+  const startImport = async (asset: MenuAsset) => {
+    setImporting(true);
+    setMessage(`Extrayendo productos de «${asset.fileName}»…`);
+    try {
+      const response = await fetch(`${apiOrigin}/api/v1/partners/menu/imports`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ assetId: asset.id }),
+      });
+      const body = await response.json().catch(() => ({})) as { draft?: ImportDraft; message?: string; error?: string };
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (!response.ok || !body.draft) throw new Error(body.message || body.error || "No se pudo analizar la carta.");
+      setImportDraft(body.draft);
+      setMessage(`Borrador creado: ${body.draft.items.length} productos detectados. Revisa y publica cuando todo sea correcto.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo analizar la carta.");
+    } finally { setImporting(false); }
+  };
+  const updateImportedItem = (id: string, patch: Partial<Item>) => {
+    setImportDraft((current) => current ? { ...current, items: current.items.map((item) => item.id === id ? { ...item, ...patch } : item) } : current);
+  };
+  const removeImportedItem = (id: string) => {
+    setImportDraft((current) => current ? { ...current, items: current.items.filter((item) => item.id !== id) } : current);
+  };
+  const publishImport = async () => {
+    if (!importDraft || !importDraft.items.length) return setMessage("Añade al menos un producto antes de publicar.");
+    setImporting(true);
+    try {
+      const update = await fetch(`${apiOrigin}/api/v1/partners/menu/imports/${encodeURIComponent(importDraft.id)}`, {
+        method: "PUT", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ items: importDraft.items }),
+      });
+      const updatedBody = await update.json().catch(() => ({})) as { draft?: ImportDraft; error?: string };
+      if (update.status === 401) { onUnauthorized(); return; }
+      if (!update.ok || !updatedBody.draft) throw new Error(updatedBody.error || "No se pudo guardar el borrador.");
+      const publish = await fetch(`${apiOrigin}/api/v1/partners/menu/imports/${encodeURIComponent(importDraft.id)}/publish`, { method: "POST", headers });
+      const publishBody = await publish.json().catch(() => ({})) as { draft?: ImportDraft; error?: string };
+      if (!publish.ok) throw new Error(publishBody.error || "No se pudo publicar la carta.");
+      setImportDraft(null);
+      await load();
+      setMessage("Carta importada y publicada correctamente. Los productos ya están disponibles según su estado.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo publicar la carta.");
+    } finally { setImporting(false); }
+  };
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -323,6 +380,7 @@ export default function MenuEditor({
                 <span className="menu-asset-icon"><FileText size={19} /></span>
                 <div><strong>{asset.fileName}</strong><small>{Math.ceil(asset.sizeBytes / 1024)} KB · {asset.scanEngine || "ClamAV"} · limpio</small></div>
                 <span className="asset-clean"><ShieldCheck size={15} /> Analizado</span>
+                <button type="button" className="secondary-button compact-button" onClick={() => void startImport(asset)} disabled={importing || uploading || saving}><Sparkles size={13} /> Importar</button>
                 <a className="secondary-button compact-button" href={asset.url} target="_blank" rel="noreferrer">Abrir</a>
                 <button type="button" className="icon-action danger" onClick={() => void removeAsset(asset)} disabled={uploading || saving} aria-label={`Eliminar ${asset.fileName}`}><Trash2 size={15} /></button>
               </article>
@@ -330,6 +388,28 @@ export default function MenuEditor({
           </div>
         ) : <p className="assets-empty">Todavía no hay un PDF de carta subido. El producto puede seguir usando su propia imagen.</p>}
       </section>
+      {importDraft && (
+        <section className="menu-import-review" aria-label="Revisión de importación de carta">
+          <div className="menu-import-header">
+            <div>
+              <p className="eyebrow">REVISIÓN OBLIGATORIA</p>
+              <h3><Sparkles size={18} /> {importDraft.sourceFileName}</h3>
+              <p>Se han detectado {importDraft.items.length} productos mediante {importDraft.extractionMethod === "ocr" ? "OCR" : "texto del PDF"}. Nada se publicará hasta que lo revises.</p>
+            </div>
+            <div className="menu-import-actions"><button type="button" className="secondary-button" onClick={() => setImportDraft(null)} disabled={importing}>Descartar borrador</button><button type="button" className="primary-button" onClick={() => void publishImport()} disabled={importing || !importDraft.items.length}><Save size={15} /> Revisar y publicar</button></div>
+          </div>
+          {importDraft.warnings.length > 0 && <div className="menu-import-warning"><strong>Revisa estos avisos:</strong><ul>{importDraft.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
+          <div className="menu-import-list">
+            {importDraft.items.map((item) => <div className="menu-import-row" key={item.id}>
+              <input value={item.name} onChange={(event) => updateImportedItem(item.id, { name: event.target.value })} aria-label="Nombre importado" />
+              <input value={item.category} onChange={(event) => updateImportedItem(item.id, { category: event.target.value })} aria-label="Categoría importada" />
+              <input type="number" min="0" step="0.01" value={item.price} onChange={(event) => updateImportedItem(item.id, { price: Number(event.target.value) })} aria-label="Precio importado" />
+              <button type="button" className="icon-action danger" onClick={() => removeImportedItem(item.id)} aria-label={`Eliminar ${item.name}`}><Trash2 size={15} /></button>
+            </div>)}
+          </div>
+          <details className="menu-import-source"><summary>Ver texto extraído para comprobar la carta</summary><pre>{importDraft.textPreview || "Sin texto extraído"}</pre></details>
+        </section>
+      )}
       <div className="menu-kpis">
         <div>
           <span>Productos</span>
