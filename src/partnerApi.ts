@@ -4,6 +4,7 @@ export const apiOrigin = (import.meta.env.PROD ? "/piki-api" : (import.meta.env.
 
 export type PartnerLocation = {
   id: string;
+  partnerCode?: string;
   name: string;
   address?: string;
   isOpen?: boolean;
@@ -50,6 +51,7 @@ function normaliseLocation(value: unknown): Omit<PartnerLocation, "roles" | "per
   if (!id && !name) return null;
   return {
     id: id || name.toLocaleLowerCase("es-ES").replace(/\s+/g, "-"),
+    partnerCode: firstText(source.partnerCode, source.partnerId, source.onboardingCode) || undefined,
     name: name || "Establecimiento asignado",
     address: firstText(source.address, source.fullAddress) || undefined,
     isOpen: bool(source.isOpen) ?? bool(source.open) ?? (text(source.status).toLowerCase() === "open" ? true : undefined),
@@ -105,6 +107,7 @@ function mergeLocations(locations: PartnerLocation[]): PartnerLocation[] {
     }
     existing.roles = [...new Set([...existing.roles, ...location.roles])];
     existing.permissions = [...new Set([...existing.permissions, ...location.permissions])];
+    existing.partnerCode ??= location.partnerCode;
     existing.isOpen ??= location.isOpen;
     existing.address ??= location.address;
     return result;
