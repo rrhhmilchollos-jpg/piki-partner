@@ -53,7 +53,7 @@ export default function ArchivedOrdersBoard({ token, locationId, canRead, onUnau
 
   useEffect(() => { void load(false); }, [load, locationId]);
 
-  return <section className="orders-workspace" aria-label="Historial de pedidos PIKI Partner Orders">
+  return <section className="orders-workspace" aria-label="Historial de pedidos GoDroid">
     <header className="orders-heading">
       <div><p className="section-kicker">ARCHIVO DEL PARTNER</p><h1>Historial de pedidos</h1><p>Las comandas entregadas o canceladas salen de la operación activa y quedan guardadas aquí para revisión.</p></div>
       <button type="button" className="support-trigger" onClick={() => void load(false)} disabled={loading}><RefreshCw size={16} /> Actualizar</button>

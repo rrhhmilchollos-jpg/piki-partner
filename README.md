@@ -1,6 +1,6 @@
-# PIKI Partner Orders
+# GoDroid
 
-Aplicación operativa para restaurantes, tiendas y supermercados asociados a **PIKI Delivery**. Está pensada para tablet, móvil o terminal del local: aceptar pedidos, preparar comandas, activar/desactivar productos y consultar rendimiento sin salir de la operación.
+**GoDroid** es la aplicación operativa de **PIKI Delivery** para restaurantes, tiendas y supermercados asociados. Está pensada para tablet, móvil o terminal del local: aceptar pedidos, preparar comandas, activar/desactivar productos y consultar rendimiento sin salir de la operación.
 
 ## Producción
 
@@ -14,13 +14,13 @@ Aplicación operativa para restaurantes, tiendas y supermercados asociados a **P
 
 El navegador no se comunica directamente con Render: las llamadas Partner usan `/piki-api/*` y Vercel las reescribe de forma same-origin a `https://api.pikidelivery.com/*`. Esto evita que la autenticación de empleados dependa de cabeceras CORS entre dominios.
 
-## Funcionalidad Orders
+## Operación GoDroid
 
 - **Estado de local:** control grande Abierto/Pausado, conectado al contrato `PATCH /api/v1/partners/store/status`.
 - **Pedidos:** carriles Nuevos, Aceptados, En preparación y Listos; temporizadores, alarma de pedidos, actualizaciones REST y eventos en tiempo real.
 - **Disponibilidad:** interruptores de producto sobre `GET`/`PUT /api/v1/partners/menu`.
 - **Rendimiento:** pantalla preparada para datos reales de `GET /api/v1/partners/metrics/overview?period=today`; no muestra cifras de demostración si el backend aún no entrega el resumen.
-- **PWA:** iconos del rider-abeja PIKI, manifest, service worker y avisos de pedidos compatibles con dispositivos de local.
+- **PWA:** nombre GoDroid en el manifest y la instalación, con iconos PIKI, service worker y avisos de pedidos compatibles con dispositivos de local.
 
 ## Identidad, locales y permisos
 

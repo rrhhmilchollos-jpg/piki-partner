@@ -148,7 +148,7 @@ function App() {
     return () => { cancelled = true; };
   }, [clearSession, token, sessionRetry]);
 
-  if (checkingSession) return <main className="auth-page"><p>Comprobando acceso seguro a PIKI Partner Orders…</p></main>;
+  if (checkingSession) return <main className="auth-page"><p>Comprobando acceso seguro a GoDroid…</p></main>;
   if (token && !profile && sessionIssue) return <SessionRecovery message={sessionIssue} onRetry={retrySession} onLogout={clearSession} />;
   if (!token || !profile) return <main className="auth-page"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(nextToken) => { saveToken(nextToken); setToken(nextToken); setCheckingSession(true); window.dispatchEvent(new Event("piki-authenticated")); }} /></main>;
   if (!profile.locations.length) return <MissingAssignment onLogout={clearSession} />;
@@ -172,8 +172,8 @@ function App() {
   const role = location.roles[0] || "operador";
 
   return <div className={`orders-app-shell ${isPdaMode ? "pda-mode" : ""}`} data-surface={isPdaMode ? "partner-pda" : "partner-orders"}>
-    <aside className={`orders-sidebar ${menuOpen ? "is-visible" : ""}`} aria-label="Navegación de PIKI Partner Orders">
-      <div className="orders-brand"><img src="/piki-rider-bee-192.png" alt="Rider abeja PIKI" /><div><strong>PIKI</strong><span>PARTNER ORDERS</span><small className="brand-vibe">Cada pedido cuenta.</small>{isPdaMode && <small className="pda-brand-badge">MODO PDA OPERATIVO</small>}</div><button type="button" className="mobile-close" onClick={() => setMenuOpen(false)} aria-label="Cerrar menú"><X size={20} /></button></div>
+    <aside className={`orders-sidebar ${menuOpen ? "is-visible" : ""}`} aria-label="Navegación de GoDroid">
+      <div className="orders-brand"><img src="/piki-rider-bee-192.png" alt="Rider abeja PIKI" /><div><strong>GoDroid</strong><span>BY PIKI</span><small className="brand-vibe">Cada pedido cuenta.</small>{isPdaMode && <small className="pda-brand-badge">MODO PDA OPERATIVO</small>}</div><button type="button" className="mobile-close" onClick={() => setMenuOpen(false)} aria-label="Cerrar menú"><X size={20} /></button></div>
       <div className="partner-establishment-card" aria-label={`Establecimiento activo: ${location.name}`}>
         <span className="partner-establishment-icon"><Store size={18} /></span>
         <div><small>ESTABLECIMIENTO ACTIVO</small><strong>{location.name}</strong><span>{location.partnerCode || location.address || "Panel operativo del Partner"}</span></div>

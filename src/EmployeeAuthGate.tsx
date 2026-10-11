@@ -139,7 +139,7 @@ export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: Props) 
     <div className="login-layout">
       <section className="login-brand-panel">
         <img src="/piki-rider-bee-512.png" alt="Rider abeja de PIKI" />
-        <p>PIKI PARTNER ORDERS</p>
+        <p>GoDroid · PIKI Delivery</p>
         <h1>El pulso de tu local, siempre en marcha.</h1>
         <span>Gestiona pedidos, disponibilidad y operación desde una sola pantalla.</span>
       </section>

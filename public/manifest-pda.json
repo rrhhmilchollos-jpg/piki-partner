@@ -1,9 +1,9 @@
 {
   "id": "/?surface=partner-pda",
-  "name": "PIKI Partner PDA",
-  "short_name": "PIKI PDA",
+  "name": "GoDroid PDA",
+  "short_name": "GoDroid PDA",
   "version": "0.2.9",
-  "description": "Terminal PDA operativa de PIKI para gestionar pedidos del establecimiento.",
+  "description": "Terminal PDA de GoDroid para gestionar pedidos del establecimiento.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
