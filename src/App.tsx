@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Archive, BarChart3, Bell, BookOpen, ChevronDown, CircleHelp, LogOut, Menu, PackageSearch, Store, X } from "lucide-react";
+import { Archive, BarChart3, Bell, BookOpen, ChevronDown, CircleHelp, LogOut, Menu, PackageSearch, Phone, Store, X } from "lucide-react";
 import "./App.css";
 import EmployeeAuthGate from "./EmployeeAuthGate";
 import MenuEditor from "./MenuEditor";
@@ -179,7 +179,7 @@ function App() {
         <div><small>ESTABLECIMIENTO ACTIVO</small><strong>{location.name}</strong><span>{location.partnerCode || location.address || "Panel operativo del Partner"}</span></div>
       </div>
       <nav>{availableNavigation.map(({ id, label, icon: Icon }) => <button type="button" key={id} className={currentView === id ? "active" : ""} onClick={() => { setActiveView(id); setMenuOpen(false); }}><Icon size={20} /><span>{label}</span></button>)}</nav>
-      <div className="sidebar-help"><CircleHelp size={18} /><span><b>¿Necesitas ayuda?</b><small>Soporte PIKI para Partners</small></span></div>
+      <a className="sidebar-help" href="tel:+34960500685" aria-label="Llamar a Soporte PIKI al 960 500 685"><CircleHelp size={18} /><span><b>Soporte PIKI</b><small>Preparación y reparto · 960 500 685</small></span><Phone size={15} /></a>
     </aside>
     {menuOpen && <button type="button" className="sidebar-scrim" aria-label="Cerrar menú" onClick={() => setMenuOpen(false)} />}
 
