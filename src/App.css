@@ -150,3 +150,8 @@ html, body, #root { max-width: 100%; overflow-x: hidden; }
 .link-button.login-help { justify-self: center; border: 0; padding: 2px 4px; color: #5d5d5d; background: transparent; font-size: 12px; text-decoration: underline; cursor: pointer; }
 .link-button.login-help:hover { color: #161616; }
 .login-success { margin: 0; padding: 10px 12px; color: #1f6b3b; background: #edf9f0; border-radius: 10px; font-size: 12px; line-height: 1.4; }
+
+/* Contacto operativo directo: preparación, reparto e incidencias. */
+.sidebar-help { text-decoration: none; transition: background .16s ease, transform .16s ease; }
+.sidebar-help:hover { background: #343434; transform: translateY(-1px); }
+.sidebar-help > svg:last-child { margin-left: auto; color: #ffd400; }
