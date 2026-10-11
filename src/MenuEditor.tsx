@@ -107,6 +107,7 @@ export default function MenuEditor({
   const [assetsLoading, setAssetsLoading] = useState(true);
   const [importDraft, setImportDraft] = useState<ImportDraft | null>(null);
   const [importing, setImporting] = useState(false);
+  const [internalDemo, setInternalDemo] = useState(false);
   const [filter, setFilter] = useState("Todos");
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
   usePwaUpdateBlocker("partner-menu-editor", Boolean(draft) || saving || uploading);
@@ -239,7 +240,9 @@ export default function MenuEditor({
       if (response.status === 401) { onUnauthorized(); return; }
       if (response.status === 403) { setItems([]); throw new Error("Este perfil no tiene permiso para consultar la carta del local activo."); }
       if (!response.ok) throw new Error(`No se pudo cargar la carta (HTTP ${response.status}).`);
-      setItems(((await response.json()) as { menu?: Item[] }).menu || []);
+      const body = (await response.json()) as { menu?: Item[]; restaurant?: { internalDemo?: boolean } };
+      setItems(body.menu || []);
+      setInternalDemo(Boolean(body.restaurant?.internalDemo));
       await loadAssets();
     } catch (error) {
       setMessage(
@@ -356,6 +359,12 @@ export default function MenuEditor({
           </button>
         </div>
       </div>
+      {internalDemo && (
+        <aside className="menu-demo-notice" role="note">
+          <strong>Entorno de demostración interno</strong>
+          <span>Esta carta sirve para mostrar el flujo de Partner de PIKI. No representa una afiliación comercial ni se publica para pedidos de clientes.</span>
+        </aside>
+      )}
       {message && (
         <p className="menu-message" role="status">
           <Check size={16} /> {message}
