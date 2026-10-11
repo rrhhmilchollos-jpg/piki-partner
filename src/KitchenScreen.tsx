@@ -11,6 +11,8 @@ type Order = PartnerKitchenOrder & {
   deliveryAddress?: string;
   items?: { name?: string; quantity?: number; priceCents?: number; unitPriceCents?: number; selectedOptions?: { groupName?: string; optionName?: string; unitPriceCents?: number }[] }[];
   totalCents?: number;
+  partnerPaymentRequired?: boolean;
+  partnerPaymentCents?: number | null;
   pickupQrUrl?: string | null;
   pickupPin?: string | null;
   restaurant?: { name?: string; address?: string; phone?: string; cuisine?: string } | null;
@@ -33,6 +35,7 @@ export default function KitchenScreen({ apiOrigin, token, onUnauthorized }: { ap
   const [message, setMessage] = useState("");
   const [busyOrderId, setBusyOrderId] = useState("");
   const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
+  const [partnerPaymentBusyId, setPartnerPaymentBusyId] = useState("");
   const {
     activeCount,
     audioReady,
@@ -119,6 +122,22 @@ export default function KitchenScreen({ apiOrigin, token, onUnauthorized }: { ap
   function printThermalTicket(order: Order) {
     setPrintingOrder(order);
   }
+  async function updatePartnerPayment(order: Order, required: boolean) {
+    if (partnerPaymentBusyId) return;
+    const fallbackAmount = Number(order.totalCents || 0);
+    const rawAmount = required ? window.prompt("Importe que debe pagar el Rider al Partner (€)", ((order.partnerPaymentCents ?? fallbackAmount) / 100).toFixed(2)) : null;
+    if (required && rawAmount === null) return;
+    const amountCents = required ? Math.max(0, Math.round(Number(String(rawAmount).replace(",", ".")) * 100)) : null;
+    if (required && (!Number.isFinite(amountCents ?? NaN) || (amountCents ?? 0) <= 0)) { setMessage("Introduce un importe válido para el pago al Partner."); return; }
+    setPartnerPaymentBusyId(order._id);
+    try {
+      const response = await fetch(`${apiOrigin}/api/v1/partners/kitchen/orders/${order._id}/partner-payment`, { method: "PATCH", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ required, amountCents }) });
+      const body = await response.json().catch(() => ({})) as { message?: string; error?: string };
+      setMessage(response.ok ? (required ? "Pago al Partner configurado para este pedido." : "Pago al Partner desactivado.") : body.message || body.error || "No se pudo actualizar el pago al Partner.");
+      if (response.ok) await load();
+    } catch { setMessage("Error de red actualizando el pago al Partner."); }
+    finally { setPartnerPaymentBusyId(""); }
+  }
 
   return <section className="application-table" aria-label="Pantalla de cocina PIKI">
     <div className="table-heading">
@@ -137,6 +156,7 @@ export default function KitchenScreen({ apiOrigin, token, onUnauthorized }: { ap
           <strong>Pedido {visibleOrderReference(order.publicCode, order._id)}</strong>
           <span className={`kitchen-status status-${order.status}`}>{labels[order.status] || order.status}</span>
           <small>{new Date(order.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} · {order.deliveryAddress || "Dirección disponible"}</small><small>{isCashOrder(order) ? `CONTRARREEMBOLSO · cobra el Rider al entregar ${(Number(order.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}` : "PAGO ONLINE CONFIRMADO"}</small>
+          <div className="partner-payment-control"><strong>{order.partnerPaymentRequired ? `El Rider paga al Partner ${(Number(order.partnerPaymentCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}` : "El Rider no paga al Partner"}</strong><button type="button" className="secondary-button" disabled={partnerPaymentBusyId === order._id} onClick={() => void updatePartnerPayment(order, !order.partnerPaymentRequired)}>{order.partnerPaymentRequired ? "Desactivar pago al Partner" : "Activar pago al Partner"}</button></div>
           <ul>{(order.items || []).map((item, index) => <li key={`${order._id}-${index}`}>{item.quantity || 1} × {item.name || "Producto"}</li>)}</ul>
           {order.status === "ready_for_pickup" && order.pickupQrUrl && <div className="pickup-verification" aria-label="Código único del pedido para autorizar la recogida del rider"><div><strong>Entrega al rider · {visibleOrderReference(order.publicCode, order._id)}</strong><span>QR del pedido · muéstralo al rider</span><b>PIN de recogida: {order.pickupPin || "—"}</b><small>Este código pertenece solo a este pedido.</small></div><img src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=4&data=${encodeURIComponent(order.pickupQrUrl)}`} alt={`QR del pedido ${visibleOrderReference(order.publicCode, order._id)}`} /></div>}
         </div>
