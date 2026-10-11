@@ -176,7 +176,7 @@ function App() {
       <div className="orders-brand"><img src="/piki-rider-bee-192.png" alt="Rider abeja PIKI" /><div><strong>PIKI</strong><span>PARTNER ORDERS</span><small className="brand-vibe">Cada pedido cuenta.</small>{isPdaMode && <small className="pda-brand-badge">MODO PDA OPERATIVO</small>}</div><button type="button" className="mobile-close" onClick={() => setMenuOpen(false)} aria-label="Cerrar menú"><X size={20} /></button></div>
       <div className="partner-establishment-card" aria-label={`Establecimiento activo: ${location.name}`}>
         <span className="partner-establishment-icon"><Store size={18} /></span>
-        <div><small>ESTABLECIMIENTO ACTIVO</small><strong>{location.name}</strong><span>{location.address || "Panel operativo del Partner"}</span></div>
+        <div><small>ESTABLECIMIENTO ACTIVO</small><strong>{location.name}</strong><span>{location.partnerCode || location.address || "Panel operativo del Partner"}</span></div>
       </div>
       <nav>{availableNavigation.map(({ id, label, icon: Icon }) => <button type="button" key={id} className={currentView === id ? "active" : ""} onClick={() => { setActiveView(id); setMenuOpen(false); }}><Icon size={20} /><span>{label}</span></button>)}</nav>
       <div className="sidebar-help"><CircleHelp size={18} /><span><b>¿Necesitas ayuda?</b><small>Soporte PIKI para Partners</small></span></div>
