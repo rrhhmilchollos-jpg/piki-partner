@@ -12,8 +12,8 @@ type WebkitWindow = typeof window & { webkitAudioContext?: typeof AudioContext }
 
 /**
  * Keeps a local list of paid orders awaiting the restaurant's acceptance.
- * It deliberately does not depend on a server polling timer: KitchenScreen
- * feeds it from the SSE event and from the REST reconciliation response.
+ * SSE is the fast path and REST reconciliation is the recovery path after a
+ * dropped stream or a browser wake-up.
  */
 // oxlint-disable-next-line react/only-export-components
 export function usePartnerOrderAlarm() {
@@ -62,19 +62,26 @@ export function usePartnerOrderAlarm() {
   }, [prepareAudio]);
 
   const reconcileKitchenOrders = useCallback((orders: PartnerKitchenOrder[]) => {
-    pendingOrderIds.current = new Set(
+    const nextPendingOrderIds = new Set(
       orders
         .filter((order) => order.status === "pending" && (order.paymentState === "paid" || order.paymentMethod === "cash" || order.cashDueAtDelivery))
         .map((order) => order._id),
     );
+    const hasNewPendingOrder = [...nextPendingOrderIds].some((orderId) => !pendingOrderIds.current.has(orderId));
+    pendingOrderIds.current = nextPendingOrderIds;
     updateCount();
-  }, [updateCount]);
+    // A failed SSE connection must not turn a REST recovery into a silent new
+    // order. The set comparison also prevents a later reconciliation from
+    // ringing twice for the same SSE-delivered order.
+    if (hasNewPendingOrder) void ringOnce();
+  }, [ringOnce, updateCount]);
 
   const notifyPaidOrder = useCallback((orderId: string) => {
     if (!orderId) return;
+    const isNewPendingOrder = !pendingOrderIds.current.has(orderId);
     pendingOrderIds.current.add(orderId);
     updateCount();
-    void ringOnce();
+    if (isNewPendingOrder) void ringOnce();
   }, [ringOnce, updateCount]);
 
   const resolveOrder = useCallback((orderId: string) => {

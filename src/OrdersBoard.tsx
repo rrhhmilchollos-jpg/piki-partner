@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BellRing, ChevronRight, CircleAlert, Clock3, MessageSquare, Printer, RefreshCw, Send, Wifi, WifiOff } from "lucide-react";
 import { PartnerOrderAlarmBanner, type PartnerKitchenOrder, usePartnerOrderAlarm } from "./PartnerOrderAlarm";
 import { apiOrigin, partnerHeaders } from "./partnerApi";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
-import { connectPikiRealtime } from "./realtime";
+import { connectPikiRealtime, type PikiRealtimeConnectionState } from "./realtime";
 import PrintablePartnerTicket from "./PrintablePartnerTicket";
 import { visibleOrderReference } from "./orderReference";
 
@@ -70,6 +70,17 @@ function orderTime(value: string): string {
   return Number.isNaN(date.getTime()) ? "Hora no disponible" : date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 }
 
+function realtimeStatusLabel(state: PikiRealtimeConnectionState, now: number): string {
+  if (state.status === "connected") return "Conectado en directo";
+  if (state.status === "offline") return "Sin red · reintentaremos al recuperar señal";
+  if (state.status === "reconnecting") {
+    if (!state.retryAt) return `Reconectando pedidos · intento ${state.attempt}`;
+    const seconds = Math.max(1, Math.ceil((state.retryAt - now) / 1_000));
+    return `Reconexión en ${seconds} s · intento ${state.attempt}`;
+  }
+  return "Conectando pedidos…";
+}
+
 export default function OrdersBoard({
   token,
   locationId,
@@ -91,13 +102,14 @@ export default function OrdersBoard({
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyOrderId, setBusyOrderId] = useState("");
-  const [connected, setConnected] = useState(false);
+  const [realtimeState, setRealtimeState] = useState<PikiRealtimeConnectionState>({ status: "connecting", attempt: 0 });
   const [now, setNow] = useState<number>(() => Date.now());
   const [activeFilter, setActiveFilter] = useState<OrderFilter>("all");
   const [supportOpen, setSupportOpen] = useState(false);
   const [supportBusy, setSupportBusy] = useState(false);
   const [supportForm, setSupportForm] = useState({ orderId: "", priority: "normal", subject: "", description: "" });
   const [printingOrder, setPrintingOrder] = useState<PartnerOrder | null>(null);
+  const transitionLockRef = useRef<string | null>(null);
   const { activeCount, audioReady, prepareAudio, reconcileKitchenOrders, notifyPaidOrder, resolveOrder } = usePartnerOrderAlarm();
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
   usePwaUpdateBlocker("partner-order-operation", Boolean(busyOrderId) || supportBusy || supportOpen);
@@ -146,7 +158,7 @@ export default function OrdersBoard({
       token,
       locationId,
       surface: "partner",
-      onState: setConnected,
+      onState: setRealtimeState,
       onEvent: (event) => {
         if (event.type === "order.awaiting_partner_acceptance") {
           notifyPaidOrder(String(event.payload.orderId ?? ""));
@@ -177,7 +189,10 @@ export default function OrdersBoard({
   }, [printingOrder]);
 
   const move = async (order: PartnerOrder, status: OrderStatus | "cancelled") => {
-    if (busyOrderId || !canRead || !canOperate) return;
+    // State updates are asynchronous, so a ref closes the brief interval in
+    // which a fast double tap could otherwise start two PATCH requests.
+    if (transitionLockRef.current || !canRead || !canOperate) return;
+    transitionLockRef.current = order._id;
     setBusyOrderId(order._id);
     try {
       const response = await fetch(`${apiOrigin}/api/v1/partners/kitchen/orders/${order._id}/status`, {
@@ -195,7 +210,10 @@ export default function OrdersBoard({
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se ha podido actualizar el pedido.");
     } finally {
-      setBusyOrderId("");
+      if (transitionLockRef.current === order._id) {
+        transitionLockRef.current = null;
+        setBusyOrderId("");
+      }
     }
   };
 
@@ -208,6 +226,8 @@ export default function OrdersBoard({
   };
   const submitSupportTicket = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); if (supportBusy) return; setSupportBusy(true); try { const response = await fetch(`${apiOrigin}/api/v1/partners/support/tickets`, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ ...supportForm, orderId: supportForm.orderId || undefined }) }); const payload = await response.json().catch(() => ({})) as { error?: string; message?: string; ticket?: { ticketNumber?: string } }; if (response.status === 401) { onUnauthorized(); return; } if (!response.ok) throw new Error(payload.message || payload.error || "No se pudo enviar la incidencia."); setSupportForm({ orderId: "", priority: "normal", subject: "", description: "" }); setSupportOpen(false); setMessage(`Incidencia ${payload.ticket?.ticketNumber || "creada"}. Soporte ya puede atenderla.`); } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo enviar la incidencia."); } finally { setSupportBusy(false); } };
   const counts = useMemo(() => ({ all: orders.length, pending: orders.filter((order) => order.status === "pending").length, accepted: orders.filter((order) => order.status === "accepted").length, preparing: orders.filter((order) => order.status === "preparing").length, ready_for_pickup: orders.filter((order) => order.status === "ready_for_pickup").length }), [orders]);
+  const isRealtimeConnected = realtimeState.status === "connected";
+  const connectionLabel = realtimeStatusLabel(realtimeState, now);
   return <section className={`orders-workspace ${pdaMode ? "pda-orders-workspace" : ""}`} aria-label={pdaMode ? "PDA operativa PIKI Partner" : "Pedidos PIKI Partner Orders"}>
     <header className="orders-heading">
       <div>
@@ -215,14 +235,14 @@ export default function OrdersBoard({
         <h1>{pdaMode ? "Pedidos del establecimiento" : "Pedidos"}</h1>
         <p>{pdaMode ? "Acepta, prepara y entrega cada pedido desde una sola pantalla." : "Gestiona cada comanda sin perder el ritmo del local."}</p>
       </div>
-      <div className="orders-heading-actions"><button type="button" className="support-trigger" onClick={() => setSupportOpen((current) => !current)}><MessageSquare size={16} /> {supportOpen ? "Cerrar soporte" : "Contactar con soporte"}</button><div className={`connection-status ${connected ? "is-live" : ""}`} aria-live="polite">
-        {connected ? <Wifi size={16} /> : <WifiOff size={16} />}
-        <span>{connected ? "Conectado en directo" : "Sincronización automática"}</span>
+      <div className="orders-heading-actions"><button type="button" className="support-trigger" onClick={() => setSupportOpen((current) => !current)}><MessageSquare size={16} /> {supportOpen ? "Cerrar soporte" : "Contactar con soporte"}</button><div className={`connection-status ${isRealtimeConnected ? "is-live" : ""} is-${realtimeState.status}`} aria-live="polite">
+        {isRealtimeConnected ? <Wifi size={16} /> : realtimeState.status === "reconnecting" ? <RefreshCw className="connection-retrying" size={16} /> : <WifiOff size={16} />}
+        <span>{connectionLabel}</span>
         <button type="button" className="icon-control" onClick={() => void load()} aria-label="Actualizar pedidos"><RefreshCw size={17} /></button>
       </div></div>
     </header>
 
-    <div className="partner-operation-strip"><div><span className="operation-dot" /> <strong>Operación activa</strong><small>Los pedidos nuevos aparecen aquí automáticamente</small></div><strong>{counts.all} {counts.all === 1 ? "pedido activo" : "pedidos activos"}</strong></div>
+    <div className="partner-operation-strip"><div><span className="operation-dot" /> <strong>Operación activa</strong><small>{counts.pending ? `${counts.pending} ${counts.pending === 1 ? "pedido pendiente de aceptación" : "pedidos pendientes de aceptación"}` : "Los pedidos nuevos aparecen aquí automáticamente"}</small></div><strong>{counts.all} {counts.all === 1 ? "pedido activo" : "pedidos activos"}</strong></div>
     <div className="order-filter-tabs" role="tablist" aria-label="Filtrar pedidos">{(Object.keys(filterLabels) as OrderFilter[]).map((filter) => <button key={filter} type="button" role="tab" aria-selected={activeFilter === filter} className={activeFilter === filter ? "is-active" : ""} onClick={() => setActiveFilter(filter)}>{filterLabels[filter]}<span>{counts[filter]}</span></button>)}</div>
     <PartnerOrderAlarmBanner count={activeCount} audioReady={audioReady} onEnableAudio={() => { void prepareAudio(); }} />
     {message && <p className="orders-message" role="status"><CircleAlert size={17} />{message}</p>}{supportOpen && <form className="partner-support-panel" onSubmit={(event) => void submitSupportTicket(event)}><div><p className="section-kicker">SOPORTE OPERATIVO</p><h2>Enviar incidencia a PIKI Support</h2><p>El equipo recibirá el local, tu cuenta y el pedido seleccionado.</p></div><label>Pedido afectado (opcional)<select value={supportForm.orderId} onChange={(event) => setSupportForm((current) => ({ ...current, orderId: event.target.value }))}><option value="">Sin pedido concreto</option>{orders.map((order) => <option key={order._id} value={order._id}>{visibleOrderReference(order.publicCode, order._id)} · {order.status}</option>)}</select></label><label>Prioridad<select value={supportForm.priority} onChange={(event) => setSupportForm((current) => ({ ...current, priority: event.target.value }))}><option value="normal">Normal</option><option value="high">Alta</option><option value="urgent">Urgente</option></select></label><label>Asunto<input required minLength={3} maxLength={180} value={supportForm.subject} onChange={(event) => setSupportForm((current) => ({ ...current, subject: event.target.value }))} placeholder="Ej. El rider no aparece en el local" /></label><label>Qué ha ocurrido<textarea required minLength={3} maxLength={4000} rows={4} value={supportForm.description} onChange={(event) => setSupportForm((current) => ({ ...current, description: event.target.value }))} placeholder="Incluye los datos operativos necesarios." /></label><button type="submit" className="support-submit" disabled={supportBusy}><Send size={15} />{supportBusy ? "Enviando…" : "Enviar a soporte"}</button></form>}
@@ -252,11 +272,11 @@ export default function OrdersBoard({
                 {order.status === "ready_for_pickup" ? <span>✅ Listo para recoger · Rider avisado</span> : order.status === "pending" ? <span>Acepta el pedido para iniciar el plazo máximo de 10 minutos.</span> : <span>⏱️ Preparación comunicada: máximo 10 minutos · el Rider puede dirigirse al local.</span>}
               </div>
               <div className="order-card-actions">
-                {lane.action && <button type="button" className="order-action" disabled={!canOperate || busyOrderId === order._id} onClick={() => void move(order, lane.action!.to)}>{busyOrderId === order._id ? "Guardando…" : lane.action.label}<ChevronRight size={17} /></button>}
+                {lane.action && <button type="button" className="order-action" disabled={!canOperate || Boolean(busyOrderId)} onClick={() => void move(order, lane.action!.to)}>{busyOrderId === order._id ? "Guardando…" : lane.action.label}<ChevronRight size={17} /></button>}
                 {lane.status === "ready_for_pickup" && <button type="button" className="ready-label" disabled>Rider avisado</button>}
                 <button type="button" className="print-control" onClick={() => printOrder(order)} aria-label={`Imprimir pedido ${order.publicCode || order._id}`} title={order.status === "pending" ? "Acepta primero para comunicar el plazo al Rider" : "Imprimir ticket"}><Printer size={16} /></button>
               </div>
-              {canCancel && lane.status !== "ready_for_pickup" && <button type="button" className="incident-control" disabled={busyOrderId === order._id} onClick={() => void move(order, "cancelled")}>Registrar incidencia</button>}
+              {canCancel && lane.status !== "ready_for_pickup" && <button type="button" className="incident-control" disabled={Boolean(busyOrderId)} onClick={() => void move(order, "cancelled")}>Registrar incidencia</button>}
             </article>)}
             {!laneOrders.length && <div className="lane-empty"><BellRing size={19} /><span>{activeFilter !== "all" ? `No hay pedidos ${filterLabels[activeFilter].toLowerCase()}` : lane.status === "pending" ? "Sin pedidos nuevos" : "Nada por hacer aquí"}</span></div>}
           </div>

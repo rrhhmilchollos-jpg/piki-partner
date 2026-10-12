@@ -139,8 +139,8 @@ function PushConsentControl() {
   if (!supported || !visible) return null;
   return <aside className="push-consent" aria-live="polite">
     <button type="button" onClick={() => setVisible(false)} aria-label="Cerrar aviso">×</button>
-    <strong>Pedidos al instante</strong>
-    <p>Activa avisos para no perder pedidos nuevos en este dispositivo.</p>
+    <strong>Avisos del navegador</strong>
+    <p>Si PIKI ha habilitado avisos para este dispositivo, puedes activarlos. El tablero se sincroniza por SSE mientras permanece abierto.</p>
     <button type="button" onClick={() => void enable()} disabled={busy}>{busy ? "Activando…" : "Activar avisos"}</button>
     {message && <p>{message}</p>}
   </aside>;
