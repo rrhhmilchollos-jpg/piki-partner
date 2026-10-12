@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BellRing, ChevronRight, CircleAlert, Clock3, MessageSquare, Printer, RefreshCw, Send, Wifi, WifiOff } from "lucide-react";
+import { BellRing, ChevronRight, CircleAlert, Clock3, MessageSquare, Printer, RefreshCw, Send, Trash2, Wifi, WifiOff } from "lucide-react";
 import { PartnerOrderAlarmBanner, type PartnerKitchenOrder, usePartnerOrderAlarm } from "./PartnerOrderAlarm";
 import { apiOrigin, partnerHeaders } from "./partnerApi";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
@@ -217,6 +217,32 @@ export default function OrdersBoard({
     }
   };
 
+  const cleanupTestOrder = async (order: PartnerOrder) => {
+    if (!canCancel || !order.testCleanupEligible || transitionLockRef.current) return;
+    const reference = visibleOrderReference(order.publicCode, order._id);
+    if (!window.confirm(`¿Eliminar permanentemente el pedido de prueba ${reference}? El pedido desaparecerá de la operación y se liberará el Rider asignado. No se puede deshacer.`)) return;
+    transitionLockRef.current = order._id;
+    setBusyOrderId(order._id);
+    try {
+      const response = await fetch(`${apiOrigin}/api/v1/partners/kitchen/orders/${encodeURIComponent(order._id)}/test-cleanup`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmOrderId: order._id }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string; message?: string };
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (response.status === 403) { setMessage("Tu perfil no tiene permiso para retirar pedidos de prueba."); return; }
+      if (!response.ok) throw new Error(payload.message || payload.error || `HTTP ${response.status}`);
+      await load();
+      setMessage(`Pedido de prueba ${reference} eliminado. El Rider asignado ha quedado libre.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo eliminar el pedido de prueba.");
+    } finally {
+      if (transitionLockRef.current === order._id) transitionLockRef.current = null;
+      setBusyOrderId("");
+    }
+  };
+
   const printOrder = (order: PartnerOrder) => {
     if (order.status === "pending") {
       setMessage("Antes de imprimir, acepta el pedido para avisar al Rider del plazo máximo de 10 minutos.");
@@ -276,6 +302,7 @@ export default function OrdersBoard({
                 {lane.status === "ready_for_pickup" && <button type="button" className="ready-label" disabled>Rider avisado</button>}
                 <button type="button" className="print-control" onClick={() => printOrder(order)} aria-label={`Imprimir pedido ${order.publicCode || order._id}`} title={order.status === "pending" ? "Acepta primero para comunicar el plazo al Rider" : "Imprimir ticket"}><Printer size={16} /></button>
               </div>
+              {canCancel && order.testCleanupEligible && <button type="button" className="incident-control" disabled={Boolean(busyOrderId)} onClick={() => void cleanupTestOrder(order)} aria-label={`Eliminar pedido de prueba ${visibleOrderReference(order.publicCode, order._id)}`}>{busyOrderId === order._id ? "Eliminando pedido de prueba…" : <><Trash2 size={15} /> Eliminar pedido de prueba</>}</button>}
               {canCancel && lane.status !== "ready_for_pickup" && <button type="button" className="incident-control" disabled={Boolean(busyOrderId)} onClick={() => void move(order, "cancelled")}>Registrar incidencia</button>}
             </article>)}
             {!laneOrders.length && <div className="lane-empty"><BellRing size={19} /><span>{activeFilter !== "all" ? `No hay pedidos ${filterLabels[activeFilter].toLowerCase()}` : lane.status === "pending" ? "Sin pedidos nuevos" : "Nada por hacer aquí"}</span></div>}

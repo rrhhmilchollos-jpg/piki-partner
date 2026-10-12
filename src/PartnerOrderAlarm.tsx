@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export type PartnerKitchenOrder = {
   _id: string;
   status: string;
+  testCleanupEligible?: boolean;
   paymentState?: string;
   paymentMethod?: "stripe" | "bizum" | "cash";
   cashDueAtDelivery?: boolean;
