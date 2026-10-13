@@ -7,6 +7,7 @@ import MenuAvailability from "./MenuAvailability";
 import OrdersBoard from "./OrdersBoard";
 import ArchivedOrdersBoard from "./ArchivedOrdersBoard";
 import PerformanceView from "./PerformanceView";
+import PartnerOnboarding from "./PartnerOnboarding";
 import { apiOrigin, displayRole, hasPermission, normalisePartnerProfile, partnerHeaders, type PartnerLocation, type PartnerProfile } from "./partnerApi";
 import { visiblePartnerViews, type PartnerView } from "./partnerNavigation";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
@@ -94,7 +95,7 @@ function SessionRecovery({ message, onRetry, onLogout }: { message: string; onRe
   </section></main>;
 }
 
-function App() {
+function PartnerOperationsApp() {
   const [token, setToken] = useState(storedToken);
   const [profile, setProfile] = useState<PartnerProfile | null>(null);
   const [activeLocationId, setActiveLocationId] = useState("");
@@ -199,6 +200,10 @@ function App() {
       </div>
     </main>
   </div>;
+}
+
+function App() {
+  return location.hash.startsWith("#onboarding") ? <PartnerOnboarding /> : <PartnerOperationsApp />;
 }
 
 export default App;
