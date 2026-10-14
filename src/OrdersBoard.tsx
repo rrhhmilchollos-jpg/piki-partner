@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BellRing, ChevronRight, CircleAlert, Clock3, MessageSquare, Printer, RefreshCw, Send, Wifi, WifiOff } from "lucide-react";
+import { BellRing, Bike, Car, ChevronRight, CircleAlert, Clock3, MapPinned, MessageSquare, Printer, RefreshCw, Send, Scooter, Wifi, WifiOff } from "lucide-react";
 import { PartnerOrderAlarmBanner, type PartnerKitchenOrder, usePartnerOrderAlarm } from "./PartnerOrderAlarm";
 import { apiOrigin, partnerHeaders } from "./partnerApi";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
@@ -24,9 +24,10 @@ export type PartnerOrder = PartnerKitchenOrder & {
   estimatedReadyAt?: string;
   partnerPrepDeadlineAt?: string | null;
   preparationMinutes?: number;
+  riderTracking?: { riderId: string; name?: string; vehicle?: string; status?: string; latitude?: number | null; longitude?: number | null; lastLocationAt?: string | null; fresh?: boolean } | null;
 };
 
-type OrderStatus = "pending" | "accepted" | "preparing" | "ready_for_pickup";
+type OrderStatus = "pending" | "accepted" | "preparing" | "ready_for_pickup" | "picked_up" | "on_the_way";
 type OrderFilter = "all" | OrderStatus;
 
 type Lane = {
@@ -41,9 +42,11 @@ const lanes: Lane[] = [
   { status: "accepted", label: "Aceptados", hint: "Pendientes de cocina", action: { label: "Iniciar preparación", to: "preparing" } },
   { status: "preparing", label: "En preparación", hint: "Cocina en marcha", action: { label: "Marcar como listo", to: "ready_for_pickup" } },
   { status: "ready_for_pickup", label: "Listos", hint: "Esperando al Rider" },
+  { status: "picked_up", label: "Recogidos", hint: "El rider ya está en ruta" },
+  { status: "on_the_way", label: "En reparto", hint: "Seguimiento activo" },
 ];
 
-const filterLabels: Record<OrderFilter, string> = { all: "Todos", pending: "Nuevos", accepted: "Aceptados", preparing: "En preparación", ready_for_pickup: "Listos" };
+const filterLabels: Record<OrderFilter, string> = { all: "Todos", pending: "Nuevos", accepted: "Aceptados", preparing: "En preparación", ready_for_pickup: "Listos", picked_up: "Recogidos", on_the_way: "En reparto" };
 
 function isCashOrder(order: PartnerOrder): boolean {
   return Boolean(order.cashDueAtDelivery || order.paymentMethod === "cash");
@@ -70,6 +73,17 @@ function orderTime(value: string): string {
   return Number.isNaN(date.getTime()) ? "Hora no disponible" : date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 }
 
+function vehicleLabel(vehicle?: string): string {
+  const value = (vehicle || "").toLowerCase();
+  if (value.includes("bike") || value.includes("bici") || value.includes("bicicleta")) return "Bicicleta";
+  if (value.includes("scoot") || value.includes("patin")) return "Patinete eléctrico";
+  if (value.includes("motor") || value.includes("moto")) return "Moto";
+  return "Coche";
+}
+function vehicleIcon(vehicle?: string) {
+  const value = vehicleLabel(vehicle);
+  return value === "Bicicleta" ? Bike : value === "Patinete eléctrico" ? Scooter : Car;
+}
 function realtimeStatusLabel(state: PikiRealtimeConnectionState, now: number): string {
   if (state.status === "connected") return "Conectado en directo";
   if (state.status === "offline") return "Sin red · reintentaremos al recuperar señal";
@@ -225,7 +239,7 @@ export default function OrdersBoard({
     setPrintingOrder(order);
   };
   const submitSupportTicket = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); if (supportBusy) return; setSupportBusy(true); try { const response = await fetch(`${apiOrigin}/api/v1/partners/support/tickets`, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ ...supportForm, orderId: supportForm.orderId || undefined }) }); const payload = await response.json().catch(() => ({})) as { error?: string; message?: string; ticket?: { ticketNumber?: string } }; if (response.status === 401) { onUnauthorized(); return; } if (!response.ok) throw new Error(payload.message || payload.error || "No se pudo enviar la incidencia."); setSupportForm({ orderId: "", priority: "normal", subject: "", description: "" }); setSupportOpen(false); setMessage(`Incidencia ${payload.ticket?.ticketNumber || "creada"}. Soporte ya puede atenderla.`); } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo enviar la incidencia."); } finally { setSupportBusy(false); } };
-  const counts = useMemo(() => ({ all: orders.length, pending: orders.filter((order) => order.status === "pending").length, accepted: orders.filter((order) => order.status === "accepted").length, preparing: orders.filter((order) => order.status === "preparing").length, ready_for_pickup: orders.filter((order) => order.status === "ready_for_pickup").length }), [orders]);
+  const counts = useMemo(() => ({ all: orders.length, pending: orders.filter((order) => order.status === "pending").length, accepted: orders.filter((order) => order.status === "accepted").length, preparing: orders.filter((order) => order.status === "preparing").length, ready_for_pickup: orders.filter((order) => order.status === "ready_for_pickup").length, picked_up: orders.filter((order) => order.status === "picked_up").length, on_the_way: orders.filter((order) => order.status === "on_the_way").length }), [orders]);
   const isRealtimeConnected = realtimeState.status === "connected";
   const connectionLabel = realtimeStatusLabel(realtimeState, now);
   return <section className={`orders-workspace ${pdaMode ? "pda-orders-workspace" : ""}`} aria-label={pdaMode ? "PDA operativa PIKI Partner" : "Pedidos PIKI Partner Orders"}>
@@ -267,6 +281,12 @@ export default function OrdersBoard({
               <ul className="order-items">{(order.items ?? []).map((item, index) => <li key={`${order._id}-${index}`}><b>{item.quantity ?? 1}×</b><span><strong>{item.name || "Producto"}</strong>{item.selectedOptions?.length ? <small>{item.selectedOptions.map((option) => option.optionName).filter(Boolean).join(" · ")}</small> : null}</span></li>)}</ul>
               {order.deliveryAddress && <p className="order-address"><span>Entrega</span>{order.deliveryAddress}</p>}
               <div className="order-meta"><span>{isCashOrder(order) ? "Contra reembolso" : "Pago online"}</span><strong>{money(order.totalCents)}</strong></div>
+              {order.riderTracking && <div className="rider-tracking-card">
+                <div className="rider-tracking-heading"><span><MapPinned size={16} /> Seguimiento del Rider</span><small className={order.riderTracking.fresh ? "tracking-live" : "tracking-stale"}>{order.riderTracking.fresh ? "En directo" : "Esperando GPS"}</small></div>
+                <p><b>{order.riderTracking.name || "Rider PIKI"}</b> · {vehicleLabel(order.riderTracking.vehicle)} · {order.riderTracking.status || "disponible"}</p>
+                {(() => { const Vehicle = vehicleIcon(order.riderTracking?.vehicle); return <Vehicle size={20} aria-label={vehicleLabel(order.riderTracking?.vehicle)} />; })()}
+                {order.riderTracking.latitude != null && order.riderTracking.longitude != null ? <a className="tracking-map-link" href={`https://www.google.com/maps/search/?api=1&query=${order.riderTracking.latitude},${order.riderTracking.longitude}`} target="_blank" rel="noreferrer"><MapPinned size={14} /> Ver posición y distancia en el mapa</a> : <span className="tracking-no-gps">La última posición todavía no está disponible.</span>}
+              </div>}
               <div className={`rider-readiness readiness-${order.status === "ready_for_pickup" ? "ready" : order.status === "pending" ? "pending" : "within_10_minutes"}`}>
                 <strong>Información para el Rider</strong>
                 {order.status === "ready_for_pickup" ? <span>✅ Listo para recoger · Rider avisado</span> : order.status === "pending" ? <span>Acepta el pedido para iniciar el plazo máximo de 10 minutos.</span> : <span>⏱️ Preparación comunicada: máximo 10 minutos · el Rider puede dirigirse al local.</span>}
