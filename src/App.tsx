@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Archive, BarChart3, Bell, BookOpen, ChevronDown, CircleHelp, LogOut, Menu, PackageSearch, Phone, Store, X } from "lucide-react";
+import { Archive, BarChart3, Bell, BookOpen, ChevronDown, CircleHelp, Clock3, LogOut, Menu, PackageSearch, Phone, Store, X } from "lucide-react";
 import "./App.css";
 import EmployeeAuthGate from "./EmployeeAuthGate";
 import MenuEditor from "./MenuEditor";
@@ -24,6 +24,7 @@ const navigation: Array<{ id: View; label: string; icon: typeof Bell }> = [
   { id: "catalog", label: "Carta del restaurante", icon: BookOpen },
   { id: "menu", label: "Disponibilidad", icon: PackageSearch },
   { id: "performance", label: "Rendimiento", icon: BarChart3 },
+  { id: "settings", label: "Configuración", icon: Clock3 },
 ];
 
 function storedToken(): string { return localStorage.getItem(tokenKey) || sessionStorage.getItem(tokenKey) || ""; }
@@ -74,6 +75,37 @@ function StoreStatusControl({ token, location, enabled, onUnauthorized }: { toke
     </button>
     {message && <p role="status">{message}</p>}
   </div>;
+}
+
+const week = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"] as const;
+type OpeningHours = Record<string, { open: string; close: string; closed: boolean }>;
+const defaultHours = (): OpeningHours => Object.fromEntries(week.map((day) => [day, { open: "10:00", close: "23:00", closed: day === "domingo" }])) as OpeningHours;
+
+function StoreHoursSettings({ token, location, enabled, onUnauthorized }: { token: string; location: PartnerLocation; enabled: boolean; onUnauthorized: () => void }) {
+  const [hours, setHours] = useState<OpeningHours>(defaultHours);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${apiOrigin}/api/v1/partners/store/hours`, { headers: partnerHeaders(token, location.id), cache: "no-store" }).then(async (response) => {
+      if (response.status === 401) { onUnauthorized(); return; }
+      const payload = await response.json().catch(() => ({}));
+      if (!cancelled && response.ok && payload.openingHours) setHours({ ...defaultHours(), ...payload.openingHours });
+    }).catch(() => { if (!cancelled) setMessage("No se pudieron cargar los horarios guardados."); });
+    return () => { cancelled = true; };
+  }, [location.id, onUnauthorized, token]);
+  const updateDay = (day: string, patch: Partial<OpeningHours[string]>) => setHours((current) => ({ ...current, [day]: { ...current[day], ...patch } }));
+  const save = async () => {
+    if (!enabled || busy) return;
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch(`${apiOrigin}/api/v1/partners/store/hours`, { method: "PATCH", headers: { ...partnerHeaders(token, location.id), "Content-Type": "application/json" }, body: JSON.stringify({ openingHours: hours }) });
+      if (response.status === 401) { onUnauthorized(); return; }
+      if (!response.ok) throw new Error("hours");
+      setMessage("Horarios guardados. PIKI los usará para indicar cuándo se aceptan comandas.");
+    } catch { setMessage("No se pudieron guardar los horarios."); } finally { setBusy(false); }
+  };
+  return <section className="hours-settings"><header><div><p className="section-kicker">CONFIGURACIÓN DEL LOCAL</p><h1>Horarios de apertura</h1><p>Programa cuándo acepta pedidos cada día. Puedes pausar el local manualmente desde el interruptor superior.</p></div><button type="button" className="support-trigger" disabled={!enabled || busy} onClick={() => void save()}>{busy ? "Guardando…" : "Guardar horarios"}</button></header><div className="hours-grid">{week.map((day) => { const value = hours[day]; return <div key={day} className="hours-row"><strong>{day}</strong><input type="time" value={value.open} disabled={value.closed || !enabled} onChange={(event) => updateDay(day, { open: event.target.value })} /><span>—</span><input type="time" value={value.close} disabled={value.closed || !enabled} onChange={(event) => updateDay(day, { close: event.target.value })} /><label className="hours-closed"><input type="checkbox" checked={value.closed} disabled={!enabled} onChange={(event) => updateDay(day, { closed: event.target.checked })} /> Cerrado</label></div>; })}</div>{message && <p className="orders-message" role="status">{message}</p>}</section>;
 }
 
 function MissingAssignment({ onLogout }: { onLogout: () => void }) {
@@ -167,6 +199,7 @@ function PartnerOperationsApp() {
     menuRead: canMenuRead,
     menuWrite: canMenu,
     metricsRead: canMetrics,
+    storeWrite: canStore,
   }));
   const availableNavigation = navigation.filter((item) => visibleViews.has(item.id));
   const currentView = availableNavigation.some((item) => item.id === activeView) ? activeView : availableNavigation[0]?.id;
@@ -197,6 +230,7 @@ function PartnerOperationsApp() {
         {currentView === "catalog" && canMenu && <MenuEditor key={location.id} apiOrigin={apiOrigin} token={token} locationId={location.id} onUnauthorized={clearSession} />}
         {currentView === "menu" && <MenuAvailability token={token} locationId={location.id} canRead={canMenuRead} canEdit={canMenu} onUnauthorized={clearSession} />}
         {currentView === "performance" && <PerformanceView token={token} locationId={location.id} canRead={canMetrics} onUnauthorized={clearSession} />}
+        {currentView === "settings" && <StoreHoursSettings token={token} location={location} enabled={canStore} onUnauthorized={clearSession} />}
       </div>
     </main>
   </div>;
