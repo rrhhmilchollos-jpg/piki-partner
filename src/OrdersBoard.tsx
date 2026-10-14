@@ -24,6 +24,7 @@ export type PartnerOrder = PartnerKitchenOrder & {
   estimatedReadyAt?: string;
   partnerPrepDeadlineAt?: string | null;
   preparationMinutes?: number;
+  riderTracking?: { riderId: string; name?: string; vehicle?: string; status?: string; latitude?: number | null; longitude?: number | null; lastLocationAt?: string | null; fresh?: boolean } | null;
 };
 
 type OrderStatus = "pending" | "accepted" | "preparing" | "ready_for_pickup" | "picked_up" | "on_the_way";
@@ -45,7 +46,7 @@ const lanes: Lane[] = [
   { status: "on_the_way", label: "En reparto", hint: "Seguimiento activo" },
 ];
 
-const filterLabels: Record<OrderFilter, string> = { all: "Todos", pending: "Nuevos", accepted: "Aceptados", preparing: "En preparación", ready_for_pickup: "Listos" };
+const filterLabels: Record<OrderFilter, string> = { all: "Todos", pending: "Nuevos", accepted: "Aceptados", preparing: "En preparación", ready_for_pickup: "Listos", picked_up: "Recogidos", on_the_way: "En reparto" };
 
 function isCashOrder(order: PartnerOrder): boolean {
   return Boolean(order.cashDueAtDelivery || order.paymentMethod === "cash");
@@ -238,7 +239,7 @@ export default function OrdersBoard({
     setPrintingOrder(order);
   };
   const submitSupportTicket = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); if (supportBusy) return; setSupportBusy(true); try { const response = await fetch(`${apiOrigin}/api/v1/partners/support/tickets`, { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ ...supportForm, orderId: supportForm.orderId || undefined }) }); const payload = await response.json().catch(() => ({})) as { error?: string; message?: string; ticket?: { ticketNumber?: string } }; if (response.status === 401) { onUnauthorized(); return; } if (!response.ok) throw new Error(payload.message || payload.error || "No se pudo enviar la incidencia."); setSupportForm({ orderId: "", priority: "normal", subject: "", description: "" }); setSupportOpen(false); setMessage(`Incidencia ${payload.ticket?.ticketNumber || "creada"}. Soporte ya puede atenderla.`); } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo enviar la incidencia."); } finally { setSupportBusy(false); } };
-  const counts = useMemo(() => ({ all: orders.length, pending: orders.filter((order) => order.status === "pending").length, accepted: orders.filter((order) => order.status === "accepted").length, preparing: orders.filter((order) => order.status === "preparing").length, ready_for_pickup: orders.filter((order) => order.status === "ready_for_pickup").length }), [orders]);
+  const counts = useMemo(() => ({ all: orders.length, pending: orders.filter((order) => order.status === "pending").length, accepted: orders.filter((order) => order.status === "accepted").length, preparing: orders.filter((order) => order.status === "preparing").length, ready_for_pickup: orders.filter((order) => order.status === "ready_for_pickup").length, picked_up: orders.filter((order) => order.status === "picked_up").length, on_the_way: orders.filter((order) => order.status === "on_the_way").length }), [orders]);
   const isRealtimeConnected = realtimeState.status === "connected";
   const connectionLabel = realtimeStatusLabel(realtimeState, now);
   return <section className={`orders-workspace ${pdaMode ? "pda-orders-workspace" : ""}`} aria-label={pdaMode ? "PDA operativa PIKI Partner" : "Pedidos PIKI Partner Orders"}>
