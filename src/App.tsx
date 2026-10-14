@@ -24,7 +24,7 @@ const navigation: Array<{ id: View; label: string; icon: typeof Bell }> = [
   { id: "catalog", label: "Carta del restaurante", icon: BookOpen },
   { id: "menu", label: "Disponibilidad", icon: PackageSearch },
   { id: "performance", label: "Rendimiento", icon: BarChart3 },
-  { id: "settings", label: "Configuración", icon: Clock3 },
+  { id: "settings", label: "Mi cuenta", icon: Clock3 },
 ];
 
 function storedToken(): string { return localStorage.getItem(tokenKey) || sessionStorage.getItem(tokenKey) || ""; }
@@ -81,6 +81,17 @@ const week = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "
 type OpeningHours = Record<string, { open: string; close: string; closed: boolean }>;
 const defaultHours = (): OpeningHours => Object.fromEntries(week.map((day) => [day, { open: "10:00", close: "23:00", closed: day === "domingo" }])) as OpeningHours;
 
+function PartnerAccountSummary({ location }: { location: PartnerLocation }) {
+  return <section className="partner-account-summary" aria-label="Configuración efectiva del establecimiento">
+    <div><p className="section-kicker">MI CUENTA · DATOS CONFIRMADOS</p><h1>{location.name}</h1><p>Estos datos proceden de la configuración guardada por PIKI Superadmin. Se actualizan al volver a cargar tu sesión.</p></div>
+    <div className="partner-account-grid">
+      <div><span>Dirección</span><strong>{location.address || "Pendiente"}</strong></div><div><span>Localidad</span><strong>{location.locality || "Pendiente"}</strong></div>
+      <div><span>Cocina / categoría</span><strong>{[location.cuisine, location.category].filter(Boolean).join(" · ") || "Pendiente"}</strong></div><div><span>Contacto</span><strong>{location.phone || location.email || "Pendiente"}</strong></div>
+      <div><span>Tarifa de entrega</span><strong>{((location.deliveryFeeCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}</strong></div><div><span>Comisión PIKI</span><strong>{((location.commissionRateBps || 0) / 100).toFixed(2)}%</strong></div>
+      <div><span>Estado comercial</span><strong>{location.availabilityStatus === "coming_soon" ? "Disponible próximamente" : location.isOpen ? "Activo y operativo" : "Pausado"}</strong></div><div><span>Promocionado</span><strong>{location.promoted ? "Sí" : "No"}</strong></div>
+    </div>
+  </section>;
+}
 function StoreHoursSettings({ token, location, enabled, onUnauthorized }: { token: string; location: PartnerLocation; enabled: boolean; onUnauthorized: () => void }) {
   const [hours, setHours] = useState<OpeningHours>(defaultHours);
   const [busy, setBusy] = useState(false);
@@ -230,7 +241,7 @@ function PartnerOperationsApp() {
         {currentView === "catalog" && canMenu && <MenuEditor key={location.id} apiOrigin={apiOrigin} token={token} locationId={location.id} onUnauthorized={clearSession} />}
         {currentView === "menu" && <MenuAvailability token={token} locationId={location.id} canRead={canMenuRead} canEdit={canMenu} onUnauthorized={clearSession} />}
         {currentView === "performance" && <PerformanceView token={token} locationId={location.id} canRead={canMetrics} onUnauthorized={clearSession} />}
-        {currentView === "settings" && <StoreHoursSettings token={token} location={location} enabled={canStore} onUnauthorized={clearSession} />}
+        {currentView === "settings" && <><PartnerAccountSummary location={location} /><StoreHoursSettings token={token} location={location} enabled={canStore} onUnauthorized={clearSession} /></>}
       </div>
     </main>
   </div>;
