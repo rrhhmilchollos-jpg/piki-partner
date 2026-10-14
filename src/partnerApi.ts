@@ -6,7 +6,16 @@ export type PartnerLocation = {
   id: string;
   partnerCode?: string;
   name: string;
+  cuisine?: string;
+  category?: string;
+  locality?: string;
   address?: string;
+  email?: string;
+  phone?: string;
+  deliveryFeeCents?: number;
+  commissionRateBps?: number;
+  promoted?: boolean;
+  availabilityStatus?: "available" | "coming_soon";
   isOpen?: boolean;
   roles: string[];
   permissions: string[];
@@ -53,7 +62,16 @@ function normaliseLocation(value: unknown): Omit<PartnerLocation, "roles" | "per
     id: id || name.toLocaleLowerCase("es-ES").replace(/\s+/g, "-"),
     partnerCode: firstText(source.partnerCode, source.partnerId, source.onboardingCode) || undefined,
     name: name || "Establecimiento asignado",
+    cuisine: firstText(source.cuisine) || undefined,
+    category: firstText(source.category) || undefined,
+    locality: firstText(source.locality) || undefined,
     address: firstText(source.address, source.fullAddress) || undefined,
+    email: firstText(source.email) || undefined,
+    phone: firstText(source.phone) || undefined,
+    deliveryFeeCents: typeof source.deliveryFeeCents === "number" ? source.deliveryFeeCents : undefined,
+    commissionRateBps: typeof source.commissionRateBps === "number" ? source.commissionRateBps : undefined,
+    promoted: bool(source.promoted),
+    availabilityStatus: source.availabilityStatus === "coming_soon" ? "coming_soon" : source.availabilityStatus === "available" ? "available" : undefined,
     isOpen: bool(source.isOpen) ?? bool(source.open) ?? (text(source.status).toLowerCase() === "open" ? true : undefined),
   };
 }
@@ -108,8 +126,10 @@ function mergeLocations(locations: PartnerLocation[]): PartnerLocation[] {
     existing.roles = [...new Set([...existing.roles, ...location.roles])];
     existing.permissions = [...new Set([...existing.permissions, ...location.permissions])];
     existing.partnerCode ??= location.partnerCode;
+    existing.cuisine ??= location.cuisine; existing.category ??= location.category; existing.locality ??= location.locality;
     existing.isOpen ??= location.isOpen;
-    existing.address ??= location.address;
+    existing.address ??= location.address; existing.email ??= location.email; existing.phone ??= location.phone;
+    existing.deliveryFeeCents ??= location.deliveryFeeCents; existing.commissionRateBps ??= location.commissionRateBps; existing.promoted ??= location.promoted; existing.availabilityStatus ??= location.availabilityStatus;
     return result;
   }, []);
 }
