@@ -102,7 +102,7 @@ export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: Props) 
         const response = await fetch(`${apiOrigin}/api/v1/auth/employee/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-PIKI-Surface": "partner" },
-          body: JSON.stringify({ email, password: current, role: "partner" }),
+          body: JSON.stringify({ identifier: email, password: current, role: "partner" }),
         });
         const data = await response.json().catch(() => ({})) as { accessToken?: string; requiresPasswordChange?: boolean };
         if (!response.ok || !data.accessToken) throw new Error(await getApiErrorMessage(response, "No se ha podido iniciar sesión."));
@@ -128,7 +128,7 @@ export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: Props) 
   const isPasswordReset = mode === "reset";
   const title = mode === "login" ? "Entra a tu local" : mode === "change" ? "Actualiza tu contraseña" : mode === "request" ? "Recupera tu acceso" : "Crea una contraseña nueva";
   const description = mode === "login"
-    ? "Utiliza las credenciales del equipo Partner que te entregó PIKI."
+    ? "Utiliza tu correo corporativo o ID PIKI (PIKI-E-XXXXXXXX) y la contraseña entregada por PIKI."
     : mode === "change"
       ? "Por seguridad, cambia la contraseña temporal antes de gestionar pedidos."
       : mode === "request"
@@ -148,7 +148,7 @@ export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: Props) 
         <p className="section-kicker">ACCESO SEGURO</p>
         <h2>{title}</h2>
         <p>{description}</p>
-        {mode !== "reset" && <label>Correo corporativo<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="correo@empresa.es" required /></label>}
+        {mode !== "reset" && <label>{mode === "login" ? "Correo corporativo o ID PIKI" : "Correo corporativo"}<input type={mode === "login" ? "text" : "email"} autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder={mode === "login" ? "correo@empresa.es o PIKI-E-XXXXXXXX" : "correo@empresa.es"} required /></label>}
         {mode === "login" && <PasswordField label="Contraseña" value={current} onChange={setCurrent} autoComplete="current-password" visible={showCurrent} onToggle={() => setShowCurrent((value) => !value)} placeholder="••••••••" />}
         {mode === "change" && <PasswordField label="Contraseña temporal" value={current} onChange={setCurrent} autoComplete="current-password" visible={showCurrent} onToggle={() => setShowCurrent((value) => !value)} placeholder="••••••••" />}
         {(mode === "change" || mode === "reset") && <PasswordField label="Nueva contraseña" value={next} onChange={setNext} autoComplete="new-password" visible={showNext} onToggle={() => setShowNext((value) => !value)} placeholder="12 caracteres o más" minLength={12} />}
