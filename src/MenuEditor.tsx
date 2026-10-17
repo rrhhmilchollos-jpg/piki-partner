@@ -140,11 +140,14 @@ function normalizeModifier(raw: Partial<Modifier>): Modifier {
       : raw.required
         ? 1
         : 0;
-  // Los grupos antiguos permitían elegir todas las opciones; se respeta.
+  // Grupo antiguo sin máximo: si es obligatorio se elige solo una opción;
+  // si es opcional se permite elegir varias.
   const maxSelections =
     Number.isInteger(raw.maxSelections) && (raw.maxSelections as number) >= Math.max(1, minSelections)
       ? (raw.maxSelections as number)
-      : Math.max(1, optionItems.length);
+      : minSelections > 0
+        ? Math.max(1, minSelections)
+        : Math.max(1, optionItems.length);
   return {
     id,
     name: raw.name ?? "",
@@ -422,6 +425,48 @@ export default function MenuEditor({
       setMessage(error instanceof Error ? error.message : "No se pudo eliminar el archivo.");
     }
   };
+  const importMenuJson = async (file: File) => {
+    setImporting(true);
+    try {
+      if (file.size > 1_000_000) throw new Error("El archivo es demasiado grande (máximo 1 MB).");
+      const parsed = JSON.parse(await file.text()) as unknown;
+      const rows = Array.isArray(parsed) ? parsed : (parsed as { items?: unknown })?.items;
+      if (!Array.isArray(rows) || !rows.length) throw new Error("El archivo no contiene productos.");
+      const stamp = Date.now().toString(36);
+      const prepared = rows.map((row, index): Item => {
+        const raw = (row ?? {}) as Partial<Item>;
+        const name = String(raw.name ?? "").trim();
+        const price = Number(raw.price);
+        if (!name || !Number.isFinite(price) || price < 0) {
+          throw new Error(`Producto ${index + 1}: revisa el nombre y el precio.`);
+        }
+        return normalizeItem({
+          id: `item-${stamp}-${index}`,
+          name,
+          description: String(raw.description ?? "").trim(),
+          price,
+          category: String(raw.category ?? "").trim() || "General",
+          // Las fotos se suben una a una desde la ficha del producto.
+          image: "",
+          allergens: Array.isArray(raw.allergens) ? raw.allergens.map(String) : [],
+          modifiers: Array.isArray(raw.modifiers) ? (raw.modifiers as Modifier[]) : [],
+          available: raw.available !== false,
+          vegetarian: Boolean(raw.vegetarian),
+          popular: Boolean(raw.popular),
+        });
+      });
+      const known = new Set(items.map((item) => `${item.category.toLowerCase()}|${item.name.toLowerCase()}`));
+      const fresh = prepared.filter((item) => !known.has(`${item.category.toLowerCase()}|${item.name.toLowerCase()}`));
+      if (!fresh.length) return setMessage("Todos los productos del archivo ya están en la carta.");
+      const skipped = prepared.length - fresh.length;
+      if (!window.confirm(`Se añadirán ${fresh.length} productos a la carta del local activo${skipped ? ` (${skipped} ya existentes se omiten)` : ""}. ¿Continuar?`)) return;
+      await persistMenu([...items, ...fresh], `${fresh.length} productos importados. Revisa extras, alérgenos y fotos antes de dar por buena la carta.`);
+    } catch (error) {
+      setMessage(error instanceof SyntaxError ? "El archivo no es un JSON válido." : error instanceof Error ? error.message : "No se pudo importar el archivo.");
+    } finally {
+      setImporting(false);
+    }
+  };
   const save = async () => {
     if (!draft || !draft.name.trim() || !Number.isFinite(draft.price) || draft.price < 0)
       return setMessage("Completa el nombre y un precio válido.");
@@ -509,6 +554,19 @@ export default function MenuEditor({
           >
             Actualizar
           </button>
+          <label className="secondary-button asset-upload-button">
+            <Upload size={16} /> Importar productos (.json)
+            <input
+              type="file"
+              accept=".json,application/json"
+              disabled={importing || saving || uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void importMenuJson(file);
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
           <button className="primary-button" onClick={() => setDraft(blank())}>
             <Plus size={16} /> Nuevo producto
           </button>
