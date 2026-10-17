@@ -20,12 +20,24 @@ import { partnerHeaders } from "./partnerApi";
 import { bytesToBase64, MENU_IMAGE_ACCEPT, prepareMenuImage, sha256File, validateMenuFile, MAX_MENU_IMAGE_BYTES } from "./menuAsset";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
 
-type Modifier = {
+type ModifierOption = {
   id: string;
   name: string;
   price: number;
+  available: boolean;
+};
+type Modifier = {
+  id: string;
+  name: string;
+  /** Campo antiguo: precio único del grupo. Se sigue enviando por compatibilidad. */
+  price: number;
   required: boolean;
+  /** Campo antiguo: solo los nombres de las opciones disponibles. */
   options: string[];
+  /** Opciones con precio y disponibilidad propios. */
+  optionItems: ModifierOption[];
+  minSelections: number;
+  maxSelections: number;
 };
 type MenuAsset = {
   id: string;
@@ -74,13 +86,132 @@ const blank = (): Item => ({
   vegetarian: false,
   popular: false,
 });
+let idCounter = 0;
+const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${(idCounter += 1)}`;
+const blankOption = (): ModifierOption => ({
+  id: uid("option"),
+  name: "",
+  price: 0,
+  available: true,
+});
 const blankModifier = (): Modifier => ({
-  id: `modifier-${Date.now()}`,
+  id: uid("modifier"),
   name: "",
   price: 0,
   required: false,
   options: [],
+  optionItems: [blankOption()],
+  minSelections: 0,
+  maxSelections: 1,
 });
+const safePrice = (value: unknown, fallback = 0) => {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+};
+
+/** Convierte un grupo guardado (formato antiguo o nuevo) al formato del editor. */
+function normalizeModifier(raw: Partial<Modifier>): Modifier {
+  const id = typeof raw.id === "string" && raw.id ? raw.id : uid("modifier");
+  const groupPrice = safePrice(raw.price);
+  const source: unknown[] =
+    Array.isArray(raw.optionItems) && raw.optionItems.length
+      ? raw.optionItems
+      : Array.isArray(raw.options)
+        ? raw.options
+        : [];
+  const optionItems = source
+    .map((entry, position): ModifierOption => {
+      const fallbackId = `${id}-opt-${position + 1}`;
+      if (typeof entry === "string") {
+        return { id: fallbackId, name: entry, price: groupPrice, available: true };
+      }
+      const record = (entry ?? {}) as Partial<ModifierOption>;
+      return {
+        id: typeof record.id === "string" && record.id ? record.id : fallbackId,
+        name: String(record.name ?? ""),
+        price: safePrice(record.price, groupPrice),
+        available: record.available !== false,
+      };
+    })
+    .filter((option) => option.name.trim());
+  const minSelections =
+    Number.isInteger(raw.minSelections) && (raw.minSelections as number) >= 0
+      ? (raw.minSelections as number)
+      : raw.required
+        ? 1
+        : 0;
+  // Los grupos antiguos permitían elegir todas las opciones; se respeta.
+  const maxSelections =
+    Number.isInteger(raw.maxSelections) && (raw.maxSelections as number) >= Math.max(1, minSelections)
+      ? (raw.maxSelections as number)
+      : Math.max(1, optionItems.length);
+  return {
+    id,
+    name: raw.name ?? "",
+    price: groupPrice,
+    required: minSelections > 0,
+    options: optionItems.filter((option) => option.available).map((option) => option.name),
+    optionItems,
+    minSelections,
+    maxSelections,
+  };
+}
+
+/** Limpia un grupo antes de guardarlo y rellena los campos antiguos. */
+function sanitizeModifier(modifier: Modifier): Modifier {
+  const optionItems = modifier.optionItems
+    .map((option) => ({
+      ...option,
+      name: option.name.trim(),
+      price: safePrice(option.price),
+    }))
+    .filter((option) => option.name);
+  const count = optionItems.length;
+  const minSelections = Math.min(
+    modifier.required ? Math.max(1, modifier.minSelections) : 0,
+    count,
+  );
+  const maxSelections = Math.min(
+    Math.max(1, minSelections, Math.floor(modifier.maxSelections) || 1),
+    Math.max(1, count),
+  );
+  const availablePrices = optionItems
+    .filter((option) => option.available)
+    .map((option) => option.price);
+  return {
+    ...modifier,
+    name: modifier.name.trim(),
+    required: minSelections > 0,
+    minSelections,
+    maxSelections,
+    optionItems,
+    options: optionItems.filter((option) => option.available).map((option) => option.name),
+    price: availablePrices.length ? Math.min(...availablePrices) : 0,
+  };
+}
+
+function normalizeItem(item: Item): Item {
+  return {
+    ...item,
+    allergens: Array.isArray(item.allergens) ? item.allergens : [],
+    modifiers: Array.isArray(item.modifiers) ? item.modifiers.map(normalizeModifier) : [],
+  };
+}
+
+/** Nombre único por contenido: una foto nueva nunca pisa a otra con el mismo nombre. */
+function uniqueImageName(fileName: string, sha256: string): string {
+  const extension = (fileName.match(/\.([a-zA-Z0-9]+)$/)?.[1] || "jpg").toLowerCase();
+  const base =
+    fileName.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 60) || "producto";
+  return `${base}-${sha256.slice(0, 10)}.${extension}`;
+}
+
+/** Cambia la dirección cuando cambia la foto, para que navegador y CDN no sirvan la antigua. */
+function withCacheVersion(url: string, version: string): string {
+  // Si la dirección ya trae parámetros (p. ej. una URL firmada) no se toca: añadir uno la invalidaría.
+  if (!url || /[?#]/.test(url) || url.startsWith("data:")) return url;
+  return `${url}?v=${version.slice(0, 12)}`;
+}
 const money = new Intl.NumberFormat("es-ES", {
   style: "currency",
   currency: "EUR",
@@ -124,7 +255,7 @@ export default function MenuEditor({
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
-          fileName: preparedFile.name,
+          fileName: kind === "menu_image" ? uniqueImageName(preparedFile.name, sha256) : preparedFile.name,
           mimeType: preparedFile.type || (kind === "menu_file" ? "application/pdf" : "image/jpeg"),
           sizeBytes: preparedFile.size,
           sha256,
@@ -148,7 +279,7 @@ export default function MenuEditor({
       if (!body.asset?.url) throw new Error("La API no devolvió la dirección del archivo.");
       setAssets((current) => [body.asset as MenuAsset, ...current.filter((asset) => asset.id !== body.asset?.id)]);
       if (kind === "menu_image") {
-        updateDraft({ image: body.asset.url });
+        updateDraft({ image: withCacheVersion(body.asset.url, sha256) });
         const result = file.size > preparedFile.size
           ? `Foto optimizada de ${Math.ceil(file.size / 1024)} KB a ${Math.ceil(preparedFile.size / 1024)} KB.`
           : `Imagen subida (${Math.ceil(preparedFile.size / 1024)} KB).`;
@@ -241,7 +372,7 @@ export default function MenuEditor({
       if (response.status === 403) { setItems([]); throw new Error("Este perfil no tiene permiso para consultar la carta del local activo."); }
       if (!response.ok) throw new Error(`No se pudo cargar la carta (HTTP ${response.status}).`);
       const body = (await response.json()) as { menu?: Item[]; restaurant?: { internalDemo?: boolean } };
-      setItems(body.menu || []);
+      setItems((body.menu || []).map(normalizeItem));
       setInternalDemo(Boolean(body.restaurant?.internalDemo));
       await loadAssets();
     } catch (error) {
@@ -268,7 +399,7 @@ export default function MenuEditor({
       if (response.status === 403) { setMessage("Este perfil no tiene permiso para modificar la carta del local activo."); return false; }
       const body = await response.json().catch(() => ({})) as { error?: string; menu?: Item[] };
       if (!response.ok) throw new Error(body.error || `No se pudo guardar la carta (HTTP ${response.status}).`);
-      setItems(Array.isArray(body.menu) ? body.menu : next);
+      setItems(Array.isArray(body.menu) ? body.menu.map(normalizeItem) : next);
       setMessage(successMessage);
       return true;
     } catch (error) {
@@ -294,9 +425,15 @@ export default function MenuEditor({
   const save = async () => {
     if (!draft || !draft.name.trim() || !Number.isFinite(draft.price) || draft.price < 0)
       return setMessage("Completa el nombre y un precio válido.");
-    const next = items.some((item) => item.id === draft.id)
-      ? items.map((item) => (item.id === draft.id ? draft : item))
-      : [...items, draft];
+    const modifiers = draft.modifiers
+      .filter((modifier) => modifier.name.trim() || modifier.optionItems.some((option) => option.name.trim()))
+      .map(sanitizeModifier);
+    const incomplete = modifiers.find((modifier) => !modifier.name || !modifier.optionItems.length);
+    if (incomplete) return setMessage("Cada grupo de extras necesita un nombre y al menos una opción.");
+    const cleaned = { ...draft, modifiers };
+    const next = items.some((item) => item.id === cleaned.id)
+      ? items.map((item) => (item.id === cleaned.id ? cleaned : item))
+      : [...items, cleaned];
     if (await persistMenu(next, "Carta guardada correctamente.")) setDraft(null);
   };
   const remove = async (id: string) => {
@@ -323,6 +460,24 @@ export default function MenuEditor({
             ...current,
             modifiers: current.modifiers.map((modifier) =>
               modifier.id === id ? { ...modifier, ...patch } : modifier,
+            ),
+          }
+        : current,
+    );
+  const updateOption = (modifierId: string, optionId: string, patch: Partial<ModifierOption>) =>
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            modifiers: current.modifiers.map((modifier) =>
+              modifier.id === modifierId
+                ? {
+                    ...modifier,
+                    optionItems: modifier.optionItems.map((option) =>
+                      option.id === optionId ? { ...option, ...patch } : option,
+                    ),
+                  }
+                : modifier,
             ),
           }
         : current,
@@ -705,9 +860,12 @@ export default function MenuEditor({
                         })
                       }
                       placeholder="Ej. Elige tu salsa"
+                      aria-label="Nombre del grupo"
                     />
                     <button
+                      type="button"
                       className="icon-action danger"
+                      aria-label="Eliminar grupo"
                       onClick={() =>
                         updateDraft({
                           modifiers: draft.modifiers.filter(
@@ -721,15 +879,15 @@ export default function MenuEditor({
                   </div>
                   <div className="form-columns">
                     <label>
-                      Precio extra (€)
+                      Máximo de opciones a elegir
                       <input
                         type="number"
-                        min="0"
-                        step="0.01"
-                        value={modifier.price}
+                        min="1"
+                        step="1"
+                        value={modifier.maxSelections}
                         onChange={(event) =>
                           updateModifier(modifier.id, {
-                            price: Number(event.target.value),
+                            maxSelections: Math.max(1, Math.floor(Number(event.target.value)) || 1),
                           })
                         }
                       />
@@ -741,24 +899,81 @@ export default function MenuEditor({
                         onChange={(event) =>
                           updateModifier(modifier.id, {
                             required: event.target.checked,
+                            minSelections: event.target.checked
+                              ? Math.max(1, modifier.minSelections)
+                              : 0,
                           })
                         }
                       />{" "}
                       Obligatorio
                     </label>
                   </div>
-                  <input
-                    value={modifier.options.join(", ")}
-                    onChange={(event) =>
-                      updateModifier(modifier.id, {
-                        options: event.target.value
-                          .split(",")
-                          .map((value) => value.trim())
-                          .filter(Boolean),
-                      })
-                    }
-                    placeholder="Opciones separadas por coma"
-                  />
+                  <div className="modifier-options">
+                    {modifier.optionItems.map((option) => (
+                      <div className="modifier-option-row" key={option.id}>
+                        <input
+                          className="modifier-option-name"
+                          value={option.name}
+                          placeholder="Nombre de la opción"
+                          aria-label="Nombre de la opción"
+                          onChange={(event) =>
+                            updateOption(modifier.id, option.id, { name: event.target.value })
+                          }
+                        />
+                        <input
+                          className="modifier-option-price"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={option.price}
+                          title="Precio extra (€). 0 = incluido"
+                          aria-label="Precio extra (€)"
+                          onChange={(event) =>
+                            updateOption(modifier.id, option.id, {
+                              price: safePrice(event.target.value),
+                            })
+                          }
+                        />
+                        <label className="checkbox-inline modifier-option-available">
+                          <input
+                            type="checkbox"
+                            checked={option.available}
+                            onChange={(event) =>
+                              updateOption(modifier.id, option.id, {
+                                available: event.target.checked,
+                              })
+                            }
+                          />{" "}
+                          Disponible
+                        </label>
+                        <button
+                          type="button"
+                          className="icon-action danger"
+                          aria-label="Eliminar opción"
+                          onClick={() =>
+                            updateModifier(modifier.id, {
+                              optionItems: modifier.optionItems.filter(
+                                (entry) => entry.id !== option.id,
+                              ),
+                            })
+                          }
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="secondary-button compact-button"
+                      onClick={() =>
+                        updateModifier(modifier.id, {
+                          optionItems: [...modifier.optionItems, blankOption()],
+                        })
+                      }
+                    >
+                      <Plus size={14} /> Añadir opción
+                    </button>
+                  </div>
                 </div>
               ))}
               <div className="editor-footer">
