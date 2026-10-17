@@ -108,3 +108,9 @@
 .menu-demo-notice{display:grid;gap:4px;margin:0;padding:12px 14px;border:1px solid #eadb8b;border-radius:12px;color:#6c5200;background:#fff8dc;font-size:12px;line-height:1.45}
 .menu-demo-notice strong{font-size:12px}
 .menu-demo-notice span{color:#765f18;font-size:11px}
+
+.modifier-options{display:grid;gap:7px}
+.modifier-option-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.modifier-option-name{flex:1 1 140px;min-width:0}
+.modifier-option-price{flex:0 0 78px;min-width:0}
+.modifier-option-available{white-space:nowrap;font-size:10px}
