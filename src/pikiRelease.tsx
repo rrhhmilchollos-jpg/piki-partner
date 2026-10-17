@@ -11,6 +11,19 @@ type GateState = "checking" | "ready" | "required" | "error";
 type AvailableUpdate = { version: string; buildId: string; required: boolean };
 const reloadKey = (buildId: string) => `piki-partner-pwa-reload:${buildId}`;
 
+async function forceNetworkPwaReload(): Promise<never> {
+  const registrations = await navigator.serviceWorker?.getRegistrations() ?? [];
+  await Promise.all(registrations.map((registration) => registration.unregister()));
+  if ("caches" in window) {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((key) => key.startsWith("piki-")).map((key) => caches.delete(key)));
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.set("piki_update", String(Date.now()));
+  window.location.replace(url.toString());
+  return new Promise(() => undefined);
+}
+
 async function registerWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) return null;
   try {
@@ -280,9 +293,7 @@ export function PikiReleaseGate({ children }: { children: ReactNode }) {
       // If a worker was already active, update() has completed with the latest
       // script. A single cache-busted navigation recovers a previously stale
       // app shell; a waiting worker instead reloads on controllerchange.
-      if (!registration.waiting && !registration.installing) {
-        reloadAfterWorkerChange(availableUpdate?.buildId || "manual");
-      }
+      if (!registration.waiting && !registration.installing) await forceNetworkPwaReload();
     } catch (error) {
       setDetail(error instanceof Error ? error.message : "No se pudo descargar la actualización PWA.");
       setUpdating(false);

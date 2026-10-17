@@ -78,8 +78,19 @@ function StoreStatusControl({ token, location, enabled, onUnauthorized }: { toke
 }
 
 const week = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"] as const;
-type OpeningHours = Record<string, { open: string; close: string; closed: boolean }>;
-const defaultHours = (): OpeningHours => Object.fromEntries(week.map((day) => [day, { open: "10:00", close: "23:00", closed: day === "domingo" }])) as OpeningHours;
+type Shift = { open: string; close: string };
+type SplitOpeningDay = { morning: Shift; afternoon: Shift; closed: boolean };
+type OpeningHours = Record<string, SplitOpeningDay>;
+const defaultHours = (): OpeningHours => Object.fromEntries(week.map((day) => [day, { morning: { open: "10:00", close: "14:00" }, afternoon: { open: "19:00", close: "23:00" }, closed: day === "domingo" }])) as OpeningHours;
+function normaliseOpeningHours(payload: unknown): OpeningHours {
+  const source = payload && typeof payload === "object" ? payload as Record<string, any> : {};
+  const defaults = defaultHours();
+  return Object.fromEntries(week.map((day) => {
+    const value = source[day];
+    if (value?.morning && value?.afternoon) return [day, { morning: { ...defaults[day].morning, ...value.morning }, afternoon: { ...defaults[day].afternoon, ...value.afternoon }, closed: Boolean(value.closed) }];
+    return [day, { morning: { open: value?.open || defaults[day].morning.open, close: value?.close || defaults[day].morning.close }, afternoon: { ...defaults[day].afternoon }, closed: value?.closed === true }];
+  })) as OpeningHours;
+}
 
 function PartnerAccountSummary({ location }: { location: PartnerLocation }) {
   return <section className="partner-account-summary" aria-label="Configuración efectiva del establecimiento">
@@ -101,11 +112,12 @@ function StoreHoursSettings({ token, location, enabled, onUnauthorized }: { toke
     fetch(`${apiOrigin}/api/v1/partners/store/hours`, { headers: partnerHeaders(token, location.id), cache: "no-store" }).then(async (response) => {
       if (response.status === 401) { onUnauthorized(); return; }
       const payload = await response.json().catch(() => ({}));
-      if (!cancelled && response.ok && payload.openingHours) setHours({ ...defaultHours(), ...payload.openingHours });
+      if (!cancelled && response.ok && payload.openingHours) setHours(normaliseOpeningHours(payload.openingHours));
     }).catch(() => { if (!cancelled) setMessage("No se pudieron cargar los horarios guardados."); });
     return () => { cancelled = true; };
   }, [location.id, onUnauthorized, token]);
-  const updateDay = (day: string, patch: Partial<OpeningHours[string]>) => setHours((current) => ({ ...current, [day]: { ...current[day], ...patch } }));
+  const updateShift = (day: string, shift: "morning" | "afternoon", patch: Partial<Shift>) => setHours((current) => ({ ...current, [day]: { ...current[day], [shift]: { ...current[day][shift], ...patch } } }));
+  const updateDay = (day: string, patch: Partial<Pick<SplitOpeningDay, "closed">>) => setHours((current) => ({ ...current, [day]: { ...current[day], ...patch } }));
   const save = async () => {
     if (!enabled || busy) return;
     setBusy(true); setMessage("");
@@ -116,7 +128,7 @@ function StoreHoursSettings({ token, location, enabled, onUnauthorized }: { toke
       setMessage("Horarios guardados. PIKI los usará para indicar cuándo se aceptan comandas.");
     } catch { setMessage("No se pudieron guardar los horarios."); } finally { setBusy(false); }
   };
-  return <section className="hours-settings"><header><div><p className="section-kicker">CONFIGURACIÓN DEL LOCAL</p><h1>Horarios de apertura</h1><p>Programa cuándo acepta pedidos cada día. Puedes pausar el local manualmente desde el interruptor superior.</p></div><button type="button" className="support-trigger" disabled={!enabled || busy} onClick={() => void save()}>{busy ? "Guardando…" : "Guardar horarios"}</button></header><div className="hours-grid">{week.map((day) => { const value = hours[day]; return <div key={day} className="hours-row"><strong>{day}</strong><input type="time" value={value.open} disabled={value.closed || !enabled} onChange={(event) => updateDay(day, { open: event.target.value })} /><span>—</span><input type="time" value={value.close} disabled={value.closed || !enabled} onChange={(event) => updateDay(day, { close: event.target.value })} /><label className="hours-closed"><input type="checkbox" checked={value.closed} disabled={!enabled} onChange={(event) => updateDay(day, { closed: event.target.checked })} /> Cerrado</label></div>; })}</div>{message && <p className="orders-message" role="status">{message}</p>}</section>;
+  return <section className="hours-settings"><header><div><p className="section-kicker">CONFIGURACIÓN DEL LOCAL</p><h1>Horarios de apertura</h1><p>Programa dos turnos de aceptación de pedidos cada día: mañana y tarde. Puedes pausar el local manualmente desde el interruptor superior.</p></div><button type="button" className="support-trigger" disabled={!enabled || busy} onClick={() => void save()}>{busy ? "Guardando…" : "Guardar horarios"}</button></header><div className="hours-grid"><div className="hours-head"><strong>Día</strong><span>Turno de mañana</span><span>Turno de tarde</span><span>Estado</span></div>{week.map((day) => { const value = hours[day]; return <div key={day} className="hours-row"><strong>{day}</strong><div className="hours-shift"><label>Apertura<input type="time" value={value.morning.open} disabled={value.closed || !enabled} onChange={(event) => updateShift(day, "morning", { open: event.target.value })} /></label><label>Cierre<input type="time" value={value.morning.close} disabled={value.closed || !enabled} onChange={(event) => updateShift(day, "morning", { close: event.target.value })} /></label></div><div className="hours-shift"><label>Apertura<input type="time" value={value.afternoon.open} disabled={value.closed || !enabled} onChange={(event) => updateShift(day, "afternoon", { open: event.target.value })} /></label><label>Cierre<input type="time" value={value.afternoon.close} disabled={value.closed || !enabled} onChange={(event) => updateShift(day, "afternoon", { close: event.target.value })} /></label></div><label className="hours-closed"><input type="checkbox" checked={value.closed} disabled={!enabled} onChange={(event) => updateDay(day, { closed: event.target.checked })} /> Cerrado todo el día</label></div>; })}</div>{message && <p className="orders-message" role="status">{message}</p>}</section>;
 }
 
 function MissingAssignment({ onLogout }: { onLogout: () => void }) {
