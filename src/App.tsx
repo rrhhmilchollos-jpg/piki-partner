@@ -80,6 +80,18 @@ function StoreStatusControl({ token, location, enabled, onUnauthorized }: { toke
 const week = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"] as const;
 type OpeningHours = Record<string, { open: string; close: string; closed: boolean }>;
 const defaultHours = (): OpeningHours => Object.fromEntries(week.map((day) => [day, { open: "10:00", close: "23:00", closed: day === "domingo" }])) as OpeningHours;
+const englishDayBySpanish: Record<(typeof week)[number], string> = { lunes: "monday", martes: "tuesday", "miércoles": "wednesday", jueves: "thursday", viernes: "friday", "sábado": "saturday", domingo: "sunday" };
+function normaliseOpeningHours(value: unknown): OpeningHours {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const defaults = defaultHours();
+  return Object.fromEntries(week.map((day) => {
+    const raw = source[day] ?? source[englishDayBySpanish[day]];
+    const item = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+    const open = typeof item.open === "string" && /^\d{2}:\d{2}$/.test(item.open) ? item.open : defaults[day].open;
+    const close = typeof item.close === "string" && /^\d{2}:\d{2}$/.test(item.close) ? item.close : defaults[day].close;
+    return [day, { open, close, closed: item.closed === true }];
+  })) as OpeningHours;
+}
 
 function PartnerAccountSummary({ location }: { location: PartnerLocation }) {
   return <section className="partner-account-summary" aria-label="Configuración efectiva del establecimiento">
@@ -101,7 +113,7 @@ function StoreHoursSettings({ token, location, enabled, onUnauthorized }: { toke
     fetch(`${apiOrigin}/api/v1/partners/store/hours`, { headers: partnerHeaders(token, location.id), cache: "no-store" }).then(async (response) => {
       if (response.status === 401) { onUnauthorized(); return; }
       const payload = await response.json().catch(() => ({}));
-      if (!cancelled && response.ok && payload.openingHours) setHours({ ...defaultHours(), ...payload.openingHours });
+      if (!cancelled && response.ok) setHours(normaliseOpeningHours(payload.openingHours));
     }).catch(() => { if (!cancelled) setMessage("No se pudieron cargar los horarios guardados."); });
     return () => { cancelled = true; };
   }, [location.id, onUnauthorized, token]);
@@ -110,11 +122,14 @@ function StoreHoursSettings({ token, location, enabled, onUnauthorized }: { toke
     if (!enabled || busy) return;
     setBusy(true); setMessage("");
     try {
-      const response = await fetch(`${apiOrigin}/api/v1/partners/store/hours`, { method: "PATCH", headers: { ...partnerHeaders(token, location.id), "Content-Type": "application/json" }, body: JSON.stringify({ openingHours: hours }) });
+      const response = await fetch(`${apiOrigin}/api/v1/partners/store/hours`, { method: "PATCH", headers: { ...partnerHeaders(token, location.id), "Content-Type": "application/json" }, body: JSON.stringify({ openingHours: normaliseOpeningHours(hours) }) });
       if (response.status === 401) { onUnauthorized(); return; }
-      if (!response.ok) throw new Error("hours");
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
+      }
       setMessage("Horarios guardados. PIKI los usará para indicar cuándo se aceptan comandas.");
-    } catch { setMessage("No se pudieron guardar los horarios."); } finally { setBusy(false); }
+    } catch (error) { setMessage(`No se pudieron guardar los horarios${error instanceof Error && error.message ? `: ${error.message}` : "."}`); } finally { setBusy(false); }
   };
   return <section className="hours-settings"><header><div><p className="section-kicker">CONFIGURACIÓN DEL LOCAL</p><h1>Horarios de apertura</h1><p>Programa cuándo acepta pedidos cada día. Puedes pausar el local manualmente desde el interruptor superior.</p></div><button type="button" className="support-trigger" disabled={!enabled || busy} onClick={() => void save()}>{busy ? "Guardando…" : "Guardar horarios"}</button></header><div className="hours-grid">{week.map((day) => { const value = hours[day]; return <div key={day} className="hours-row"><strong>{day}</strong><input type="time" value={value.open} disabled={value.closed || !enabled} onChange={(event) => updateDay(day, { open: event.target.value })} /><span>—</span><input type="time" value={value.close} disabled={value.closed || !enabled} onChange={(event) => updateDay(day, { close: event.target.value })} /><label className="hours-closed"><input type="checkbox" checked={value.closed} disabled={!enabled} onChange={(event) => updateDay(day, { closed: event.target.checked })} /> Cerrado</label></div>; })}</div>{message && <p className="orders-message" role="status">{message}</p>}</section>;
 }
