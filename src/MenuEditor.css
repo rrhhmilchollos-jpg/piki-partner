@@ -112,5 +112,7 @@
 .modifier-options{display:grid;gap:7px}
 .modifier-option-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .modifier-option-name{flex:1 1 140px;min-width:0}
-.modifier-option-price{flex:0 0 78px;min-width:0}
+.modifier-option-price{position:relative;flex:0 0 92px;min-width:0}
+.modifier-option-price input{width:100%;padding-right:24px}
+.modifier-option-price::after{content:"€";position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#8e8e8e;font-size:12px;pointer-events:none}
 .modifier-option-available{white-space:nowrap;font-size:10px}
