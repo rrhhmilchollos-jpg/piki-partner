@@ -909,6 +909,9 @@ export default function MenuEditor({
                     </label>
                   </div>
                   <div className="modifier-options">
+                    <span className="field-hint">
+                      Nombre de la opción y precio extra en euros (0 = incluido)
+                    </span>
                     {modifier.optionItems.map((option) => (
                       <div className="modifier-option-row" key={option.id}>
                         <input
@@ -920,20 +923,21 @@ export default function MenuEditor({
                             updateOption(modifier.id, option.id, { name: event.target.value })
                           }
                         />
-                        <input
-                          className="modifier-option-price"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={option.price}
-                          title="Precio extra (€). 0 = incluido"
-                          aria-label="Precio extra (€)"
-                          onChange={(event) =>
-                            updateOption(modifier.id, option.id, {
-                              price: safePrice(event.target.value),
-                            })
-                          }
-                        />
+                        <span className="modifier-option-price">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={option.price}
+                            title="Precio extra (€). 0 = incluido"
+                            aria-label="Precio extra (€)"
+                            onChange={(event) =>
+                              updateOption(modifier.id, option.id, {
+                                price: safePrice(event.target.value),
+                              })
+                            }
+                          />
+                        </span>
                         <label className="checkbox-inline modifier-option-available">
                           <input
                             type="checkbox"
