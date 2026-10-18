@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BellRing, Bike, Car, ChevronRight, CircleAlert, Clock3, MapPinned, MessageSquare, Printer, RefreshCw, Send, Scooter, Wifi, WifiOff } from "lucide-react";
+import { BellRing, Bike, Car, ChevronRight, CircleAlert, Clock3, MapPinned, MessageSquare, Printer, RefreshCw, Send, Scooter, Wifi, WifiOff, XCircle } from "lucide-react";
 import { PartnerOrderAlarmBanner, type PartnerKitchenOrder, usePartnerOrderAlarm } from "./PartnerOrderAlarm";
 import { apiOrigin, partnerHeaders } from "./partnerApi";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
@@ -231,6 +231,11 @@ export default function OrdersBoard({
     }
   };
 
+  const cancelOrder = (order: PartnerOrder) => {
+    if (!window.confirm(`¿Cancelar el pedido ${visibleOrderReference(order.publicCode, order._id)}? Esta acción lo cerrará y avisará al cliente.`)) return;
+    void move(order, "cancelled");
+  };
+
   const printOrder = (order: PartnerOrder) => {
     if (order.status === "pending") {
       setMessage("Antes de imprimir, acepta el pedido para avisar al Rider del plazo máximo de 10 minutos.");
@@ -296,7 +301,7 @@ export default function OrdersBoard({
                 {lane.status === "ready_for_pickup" && <button type="button" className="ready-label" disabled>Rider avisado</button>}
                 <button type="button" className="print-control" onClick={() => printOrder(order)} aria-label={`Imprimir pedido ${order.publicCode || order._id}`} title={order.status === "pending" ? "Acepta primero para comunicar el plazo al Rider" : "Imprimir ticket"}><Printer size={16} /></button>
               </div>
-              {canCancel && lane.status !== "ready_for_pickup" && <button type="button" className="incident-control" disabled={Boolean(busyOrderId)} onClick={() => void move(order, "cancelled")}>Registrar incidencia</button>}
+              {canCancel && ["pending", "accepted", "preparing"].includes(lane.status) && <button type="button" className="incident-control" disabled={Boolean(busyOrderId)} onClick={() => cancelOrder(order)}><XCircle size={15} /> Cancelar pedido</button>}
             </article>)}
             {!laneOrders.length && <div className="lane-empty"><BellRing size={19} /><span>{activeFilter !== "all" ? `No hay pedidos ${filterLabels[activeFilter].toLowerCase()}` : lane.status === "pending" ? "Sin pedidos nuevos" : "Nada por hacer aquí"}</span></div>}
           </div>
