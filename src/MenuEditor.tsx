@@ -390,6 +390,12 @@ export default function MenuEditor({
     // oxlint-disable-next-line react/set-state-in-effect
     void load();
   }, [load]);
+  useEffect(() => {
+    const refresh = window.setInterval(() => {
+      if (!draft && !saving && !uploading && !importing) void load();
+    }, 120_000);
+    return () => window.clearInterval(refresh);
+  }, [draft, importing, load, saving, uploading]);
   const persistMenu = async (next: Item[], successMessage: string): Promise<boolean> => {
     setSaving(true);
     try {
