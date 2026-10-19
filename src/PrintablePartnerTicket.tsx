@@ -16,7 +16,6 @@ export type PrintablePartnerOrder = {
   totalCents?: number;
   paymentMethod?: string;
   cashDueAtDelivery?: boolean;
-  pickupPin?: string | null;
   restaurant?: { name?: string; address?: string; phone?: string } | null;
   customer?: { name?: string } | null;
 };
@@ -66,7 +65,6 @@ export default function PrintablePartnerTicket({ order }: { order: PrintablePart
     <div className="thermal-rule" />
     <p className="thermal-line"><span>Pago</span><b>{isCashOrder(order) ? "EFECTIVO · cobra Rider" : "PAGADO ONLINE"}</b></p>
     <p className="thermal-line"><span>Total</span><b>{(Number(order.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}</b></p>
-    {order.pickupPin && <><div className="thermal-rule" /><p className="thermal-pickup-label">ENTREGA AL RIDER</p><p className="thermal-pin">{order.pickupPin}</p><p className="thermal-help">Muestra este PIN o el QR de recogida cuando el pedido esté listo.</p></>}
     <footer>Gracias por colaborar con PIKI<br />partners.pikidelivery.com</footer>
   </div>;
 }
