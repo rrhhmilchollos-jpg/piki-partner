@@ -78,8 +78,9 @@ function StoreStatusControl({ token, location, enabled, onUnauthorized }: { toke
 }
 
 const week = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"] as const;
-type OpeningHours = Record<string, { open: string; close: string; closed: boolean }>;
-const defaultHours = (): OpeningHours => Object.fromEntries(week.map((day) => [day, { open: "10:00", close: "23:00", closed: day === "domingo" }])) as OpeningHours;
+type HoursWindow = { open: string; close: string; closed: boolean };
+type OpeningHours = Record<string, { morning: HoursWindow; evening: HoursWindow; closed: boolean }>;
+const defaultHours = (): OpeningHours => Object.fromEntries(week.map((day) => [day, { morning: { open: "10:00", close: "14:00", closed: day === "domingo" }, evening: { open: "18:00", close: "23:00", closed: day === "domingo" }, closed: day === "domingo" }])) as OpeningHours;
 const englishDayBySpanish: Record<(typeof week)[number], string> = { lunes: "monday", martes: "tuesday", "miércoles": "wednesday", jueves: "thursday", viernes: "friday", "sábado": "saturday", domingo: "sunday" };
 function normaliseOpeningHours(value: unknown): OpeningHours {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -87,9 +88,12 @@ function normaliseOpeningHours(value: unknown): OpeningHours {
   return Object.fromEntries(week.map((day) => {
     const raw = source[day] ?? source[englishDayBySpanish[day]];
     const item = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
-    const open = typeof item.open === "string" && /^\d{2}:\d{2}$/.test(item.open) ? item.open : defaults[day].open;
-    const close = typeof item.close === "string" && /^\d{2}:\d{2}$/.test(item.close) ? item.close : defaults[day].close;
-    return [day, { open, close, closed: item.closed === true }];
+    const legacy = typeof item.open === "string" || typeof item.close === "string";
+    const window = (candidate: unknown, fallback: HoursWindow): HoursWindow => {
+      const value = candidate && typeof candidate === "object" && !Array.isArray(candidate) ? candidate as Record<string, unknown> : {};
+      return { open: typeof value.open === "string" && /^\d{2}:\d{2}$/.test(value.open) ? value.open : fallback.open, close: typeof value.close === "string" && /^\d{2}:\d{2}$/.test(value.close) ? value.close : fallback.close, closed: value.closed === true };
+    };
+    return [day, { morning: window(legacy ? item : item.morning, defaults[day].morning), evening: window(legacy ? item : item.evening, defaults[day].evening), closed: item.closed === true }];
   })) as OpeningHours;
 }
 
@@ -117,7 +121,8 @@ function StoreHoursSettings({ token, location, enabled, onUnauthorized }: { toke
     }).catch(() => { if (!cancelled) setMessage("No se pudieron cargar los horarios guardados."); });
     return () => { cancelled = true; };
   }, [location.id, onUnauthorized, token]);
-  const updateDay = (day: string, patch: Partial<OpeningHours[string]>) => setHours((current) => ({ ...current, [day]: { ...current[day], ...patch } }));
+  const updateWindow = (day: string, period: "morning" | "evening", patch: Partial<HoursWindow>) => setHours((current) => ({ ...current, [day]: { ...current[day], [period]: { ...current[day][period], ...patch } } }));
+  const updateDay = (day: string, patch: Partial<Pick<OpeningHours[string], "closed">>) => setHours((current) => ({ ...current, [day]: { ...current[day], ...patch } }));
   const save = async () => {
     if (!enabled || busy) return;
     setBusy(true); setMessage("");
@@ -131,7 +136,7 @@ function StoreHoursSettings({ token, location, enabled, onUnauthorized }: { toke
       setMessage("Horarios guardados. PIKI los usará para indicar cuándo se aceptan comandas.");
     } catch (error) { setMessage(`No se pudieron guardar los horarios${error instanceof Error && error.message ? `: ${error.message}` : "."}`); } finally { setBusy(false); }
   };
-  return <section className="hours-settings"><header><div><p className="section-kicker">CONFIGURACIÓN DEL LOCAL</p><h1>Horarios de apertura</h1><p>Programa cuándo acepta pedidos cada día. Puedes pausar el local manualmente desde el interruptor superior.</p></div><button type="button" className="support-trigger" disabled={!enabled || busy} onClick={() => void save()}>{busy ? "Guardando…" : "Guardar horarios"}</button></header><div className="hours-grid">{week.map((day) => { const value = hours[day]; return <div key={day} className="hours-row"><strong>{day}</strong><input type="time" value={value.open} disabled={value.closed || !enabled} onChange={(event) => updateDay(day, { open: event.target.value })} /><span>—</span><input type="time" value={value.close} disabled={value.closed || !enabled} onChange={(event) => updateDay(day, { close: event.target.value })} /><label className="hours-closed"><input type="checkbox" checked={value.closed} disabled={!enabled} onChange={(event) => updateDay(day, { closed: event.target.checked })} /> Cerrado</label></div>; })}</div>{message && <p className="orders-message" role="status">{message}</p>}</section>;
+  return <section className="hours-settings"><header><div><p className="section-kicker">CONFIGURACIÓN DEL LOCAL</p><h1>Horarios de apertura</h1><p>Configura una franja de mañana y otra de tarde-noche para cada día.</p></div><button type="button" className="support-trigger" disabled={!enabled || busy} onClick={() => void save()}>{busy ? "Guardando…" : "Guardar horarios"}</button></header><div className="hours-grid">{week.map((day) => { const value = hours[day]; return <div key={day} className="hours-row hours-row-split"><strong>{day}</strong><span className="hours-period-label">Mañana</span><input type="time" value={value.morning.open} disabled={value.closed || value.morning.closed || !enabled} onChange={(event) => updateWindow(day, "morning", { open: event.target.value })} /><span>—</span><input type="time" value={value.morning.close} disabled={value.closed || value.morning.closed || !enabled} onChange={(event) => updateWindow(day, "morning", { close: event.target.value })} /><span className="hours-period-label">Tarde-noche</span><input type="time" value={value.evening.open} disabled={value.closed || value.evening.closed || !enabled} onChange={(event) => updateWindow(day, "evening", { open: event.target.value })} /><span>—</span><input type="time" value={value.evening.close} disabled={value.closed || value.evening.closed || !enabled} onChange={(event) => updateWindow(day, "evening", { close: event.target.value })} /><label className="hours-closed"><input type="checkbox" checked={value.closed} disabled={!enabled} onChange={(event) => updateDay(day, { closed: event.target.checked })} /> Cerrado</label></div>; })}</div>{message && <p className="orders-message" role="status">{message}</p>}</section>;
 }
 
 function MissingAssignment({ onLogout }: { onLogout: () => void }) {
