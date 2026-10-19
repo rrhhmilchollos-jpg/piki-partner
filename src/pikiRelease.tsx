@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Capacitor } from "@capacitor/core";
 import { apiOrigin } from "./partnerApi";
 import { getPwaUpdateDecision, isValidReleasePolicy, shouldReloadAfterControllerChange, type ReleasePolicy } from "./pwaUpdatePolicy";
 import { isPwaUpdateSafe, subscribeToPwaUpdateSafety } from "./pwaUpdateRuntime";
@@ -10,8 +11,10 @@ import { shouldShowPushConsent } from "./pushConsentPolicy";
 type GateState = "checking" | "ready" | "required" | "error";
 type AvailableUpdate = { version: string; buildId: string; required: boolean };
 const reloadKey = (buildId: string) => `piki-partner-pwa-reload:${buildId}`;
+const nativeApp = Capacitor.isNativePlatform();
 
 async function registerWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (nativeApp) return null;
   if (!("serviceWorker" in navigator)) return null;
   try {
     const registration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
@@ -213,6 +216,10 @@ export function PikiReleaseGate({ children }: { children: ReactNode }) {
   }), [activateWaitingWorkerIfSafe, settleControllerChange]);
 
   const check = useCallback(async () => {
+    if (nativeApp) {
+      setState("ready");
+      return;
+    }
     try {
       const registration = await registerWorker();
       registrationRef.current = registration;
@@ -246,6 +253,10 @@ export function PikiReleaseGate({ children }: { children: ReactNode }) {
   }, [activateWaitingWorkerIfSafe]);
 
   useEffect(() => {
+    if (nativeApp) {
+      void check();
+      return;
+    }
     void check();
     const onFocus = () => void check();
     window.addEventListener("focus", onFocus);
