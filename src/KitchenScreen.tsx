@@ -13,8 +13,6 @@ type Order = PartnerKitchenOrder & {
   totalCents?: number;
   partnerPaymentRequired?: boolean;
   partnerPaymentCents?: number | null;
-  pickupQrUrl?: string | null;
-  pickupPin?: string | null;
   restaurant?: { name?: string; address?: string; phone?: string; cuisine?: string } | null;
   customer?: { name?: string; email?: string } | null;
 };
@@ -158,7 +156,6 @@ export default function KitchenScreen({ apiOrigin, token, onUnauthorized }: { ap
           <small>{new Date(order.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} · {order.deliveryAddress || "Dirección disponible"}</small><small>{isCashOrder(order) ? `CONTRARREEMBOLSO · cobra el Rider al entregar ${(Number(order.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}` : "PAGO ONLINE CONFIRMADO"}</small>
           <div className="partner-payment-control"><strong>{order.partnerPaymentRequired ? `El Rider paga al Partner ${(Number(order.partnerPaymentCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}` : "El Rider no paga al Partner"}</strong><button type="button" className="secondary-button" disabled={partnerPaymentBusyId === order._id} onClick={() => void updatePartnerPayment(order, !order.partnerPaymentRequired)}>{order.partnerPaymentRequired ? "Desactivar pago al Partner" : "Activar pago al Partner"}</button></div>
           <ul>{(order.items || []).map((item, index) => <li key={`${order._id}-${index}`}>{item.quantity || 1} × {item.name || "Producto"}</li>)}</ul>
-          {order.status === "ready_for_pickup" && order.pickupQrUrl && <div className="pickup-verification" aria-label="Código único del pedido para autorizar la recogida del rider"><div><strong>Entrega al rider · {visibleOrderReference(order.publicCode, order._id)}</strong><span>QR del pedido · muéstralo al rider</span><b>PIN de recogida: {order.pickupPin || "—"}</b><small>Este código pertenece solo a este pedido.</small></div><img src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=4&data=${encodeURIComponent(order.pickupQrUrl)}`} alt={`QR del pedido ${visibleOrderReference(order.publicCode, order._id)}`} /></div>}
         </div>
         <div className="pda-actions">
           {order.status === "pending" && <button className="primary-button" disabled={busyOrderId === order._id} onClick={() => void move(order._id, "accepted")}>{busyOrderId === order._id ? "Aceptando…" : "Aceptar pedido"}</button>}

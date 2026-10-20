@@ -123,6 +123,7 @@ export default function OrdersBoard({
   const [supportBusy, setSupportBusy] = useState(false);
   const [supportForm, setSupportForm] = useState({ orderId: "", priority: "normal", subject: "", description: "" });
   const [printingOrder, setPrintingOrder] = useState<PartnerOrder | null>(null);
+  const [preparationMinutesByOrder, setPreparationMinutesByOrder] = useState<Record<string, number>>({});
   const transitionLockRef = useRef<string | null>(null);
   const { activeCount, audioReady, prepareAudio, reconcileKitchenOrders, notifyPaidOrder, resolveOrder } = usePartnerOrderAlarm();
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
@@ -202,7 +203,7 @@ export default function OrdersBoard({
     };
   }, [printingOrder]);
 
-  const move = async (order: PartnerOrder, status: OrderStatus | "cancelled") => {
+  const move = async (order: PartnerOrder, status: OrderStatus | "cancelled", preparationMinutes?: number) => {
     // State updates are asynchronous, so a ref closes the brief interval in
     // which a fast double tap could otherwise start two PATCH requests.
     if (transitionLockRef.current || !canRead || !canOperate) return;
@@ -212,7 +213,7 @@ export default function OrdersBoard({
       const response = await fetch(`${apiOrigin}/api/v1/partners/kitchen/orders/${order._id}/status`, {
         method: "PATCH",
         headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...(status === "preparing" ? { preparationMinutes: preparationMinutes ?? 4 } : {}) }),
       });
       const payload = await response.json().catch(() => ({})) as { error?: string; message?: string };
       if (response.status === 401) { onUnauthorized(); return; }
@@ -294,10 +295,11 @@ export default function OrdersBoard({
               </div>}
               <div className={`rider-readiness readiness-${order.status === "ready_for_pickup" ? "ready" : order.status === "pending" ? "pending" : "within_10_minutes"}`}>
                 <strong>Información para el Rider</strong>
-                {order.status === "ready_for_pickup" ? <span>✅ Listo para recoger · Rider avisado</span> : order.status === "pending" ? <span>Acepta el pedido para iniciar el plazo máximo de 10 minutos.</span> : <span>⏱️ Preparación comunicada: máximo 10 minutos · el Rider puede dirigirse al local.</span>}
+                {order.status === "ready_for_pickup" ? <span>✅ Listo para recoger · Rider avisado</span> : order.status === "pending" ? <span>Acepta el pedido para iniciar la preparación.</span> : <span>⏱️ Estará listo en {order.preparationMinutes ?? 4} minutos · Rider informado en tiempo real.</span>}
               </div>
+              {order.status === "accepted" && <label className="preparation-time-control">Tiempo estimado de preparación<select value={preparationMinutesByOrder[order._id] ?? 4} onChange={(event) => setPreparationMinutesByOrder((previous) => ({ ...previous, [order._id]: Number(event.target.value) }))}>{[4, 5, 6, 7, 8, 9, 10].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutos</option>)}</select></label>}
               <div className="order-card-actions">
-                {lane.action && <button type="button" className="order-action" disabled={!canOperate || Boolean(busyOrderId)} onClick={() => void move(order, lane.action!.to)}>{busyOrderId === order._id ? "Guardando…" : lane.action.label}<ChevronRight size={17} /></button>}
+                {lane.action && <button type="button" className="order-action" disabled={!canOperate || Boolean(busyOrderId)} onClick={() => void move(order, lane.action!.to, preparationMinutesByOrder[order._id] ?? 4)}>{busyOrderId === order._id ? "Guardando…" : lane.action.label}{order.status === "accepted" ? ` · ${preparationMinutesByOrder[order._id] ?? 4} min` : ""}<ChevronRight size={17} /></button>}
                 {lane.status === "ready_for_pickup" && <button type="button" className="ready-label" disabled>Rider avisado</button>}
                 <button type="button" className="print-control" onClick={() => printOrder(order)} aria-label={`Imprimir pedido ${order.publicCode || order._id}`} title={order.status === "pending" ? "Acepta primero para comunicar el plazo al Rider" : "Imprimir ticket"}><Printer size={16} /></button>
               </div>
