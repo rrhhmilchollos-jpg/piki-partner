@@ -14,7 +14,7 @@ public class MainActivity extends BridgeActivity {
     private AppUpdateManager appUpdateManager;
 
     @Override public void onCreate(@Nullable Bundle savedInstanceState) { super.onCreate(savedInstanceState); appUpdateManager = AppUpdateManagerFactory.create(this); checkForUpdate(); }
-    @Override protected void onResume() { super.onResume(); if (appUpdateManager == null) return; appUpdateManager.getAppUpdateInfo().addOnSuccessListener(info -> { if (info.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS) startImmediateUpdate(info); }); }
+    @Override public void onResume() { super.onResume(); if (appUpdateManager == null) return; appUpdateManager.getAppUpdateInfo().addOnSuccessListener(info -> { if (info.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS) startImmediateUpdate(info); }); }
     private void checkForUpdate() { appUpdateManager.getAppUpdateInfo().addOnSuccessListener(info -> { if (info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE && info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)) startImmediateUpdate(info); }); }
     private void startImmediateUpdate(AppUpdateInfo info) { try { appUpdateManager.startUpdateFlowForResult(info, AppUpdateType.IMMEDIATE, this, APP_UPDATE_REQUEST_CODE); } catch (Exception ignored) { /* Play Store no disponible: continuar operando. */ } }
 }
