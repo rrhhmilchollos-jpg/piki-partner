@@ -22,3 +22,16 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# Secretos y configuración local: nunca versionar valores de entorno
+.env
+.env.*
+!.env.example
+!.env.template
+# Material criptográfico privado; los certificados públicos se gestionan aparte
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.pem
+!play-assets/*.pem
