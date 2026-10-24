@@ -34,4 +34,3 @@ dist-ssr
 *.jks
 *.keystore
 *.pem
-!play-assets/*.pem
