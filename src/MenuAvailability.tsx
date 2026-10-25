@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ChefHat, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
 import { apiOrigin, partnerHeaders } from "./partnerApi";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
+import { connectCatalogRealtime } from "./catalogRealtime";
 
 /* oxlint-disable react/set-state-in-effect -- effects synchronise the remote partner menu. */
 
@@ -53,6 +54,10 @@ export default function MenuAvailability({ token, locationId, canRead, canEdit, 
   }, [canRead, headers, onUnauthorized]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (!canRead || !token || !locationId) return undefined;
+    return connectCatalogRealtime(apiOrigin, () => { void load(); });
+  }, [apiOrigin, canRead, load, locationId, token]);
 
   const categories = useMemo(() => ["Todos", ...Array.from(new Set(items.map((item) => item.category || "General")))], [items]);
   const visible = items.filter((item) => (filter === "Todos" || (item.category || "General") === filter) && item.name.toLowerCase().includes(query.toLowerCase()));

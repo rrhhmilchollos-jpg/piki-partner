@@ -19,6 +19,7 @@ import "./MenuEditor.css";
 import { partnerHeaders } from "./partnerApi";
 import { bytesToBase64, MENU_IMAGE_ACCEPT, prepareMenuImage, sha256File, validateMenuFile, MAX_MENU_IMAGE_BYTES } from "./menuAsset";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
+import { connectCatalogRealtime } from "./catalogRealtime";
 
 type ModifierOption = {
   id: string;
@@ -393,9 +394,15 @@ export default function MenuEditor({
   useEffect(() => {
     const refresh = window.setInterval(() => {
       if (!draft && !saving && !uploading && !importing) void load();
-    }, 120_000);
+    }, 30_000);
     return () => window.clearInterval(refresh);
   }, [draft, importing, load, saving, uploading]);
+  useEffect(() => {
+    if (!token || !locationId) return undefined;
+    return connectCatalogRealtime(apiOrigin, () => {
+      if (!draft && !saving && !uploading && !importing) void load();
+    });
+  }, [apiOrigin, draft, importing, load, locationId, saving, token, uploading]);
   const persistMenu = async (next: Item[], successMessage: string): Promise<boolean> => {
     setSaving(true);
     try {
