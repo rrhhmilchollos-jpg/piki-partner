@@ -270,7 +270,10 @@ function PartnerOperationsApp() {
 }
 
 function App() {
-  return location.hash.startsWith("#onboarding") ? <PartnerOnboarding /> : <PartnerOperationsApp />;
+  return <>
+    <CookieConsent />
+    {location.hash.startsWith("#onboarding") ? <PartnerOnboarding /> : <PartnerOperationsApp />}
+  </>;
 }
 
 export default App;
