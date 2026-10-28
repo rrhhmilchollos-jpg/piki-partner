@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Archive, BarChart3, Bell, BookOpen, ChevronDown, CircleHelp, Clock3, LogOut, Menu, PackageSearch, Phone, Store, X } from "lucide-react";
 import "./App.css";
+import CookieConsent from "./components/CookieConsent";
 import EmployeeAuthGate from "./EmployeeAuthGate";
 import MenuEditor from "./MenuEditor";
 import MenuAvailability from "./MenuAvailability";

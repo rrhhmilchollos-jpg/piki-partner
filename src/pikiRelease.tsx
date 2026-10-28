@@ -171,9 +171,10 @@ export function PikiReleaseGate({ children }: { children: ReactNode }) {
     if (!manualRetry && sessionStorage.getItem(key)) return false;
 
     sessionStorage.setItem(key, "1");
-    const url = new URL(window.location.href);
-    url.searchParams.set("piki_update", buildId);
-    window.location.replace(url.toString());
+    // The new worker already owns the page. Reload the current URL directly;
+    // adding piki_update creates a new history/cache key and can re-enter the
+    // release gate with the same stale bundle when deployments are staggered.
+    window.location.reload();
     return true;
   }, []);
 
