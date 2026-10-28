@@ -6,6 +6,7 @@ import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
 import { connectPikiRealtime, type PikiRealtimeConnectionState } from "./realtime";
 import PrintablePartnerTicket from "./PrintablePartnerTicket";
 import { visibleOrderReference } from "./orderReference";
+import { createPartnerVisibilityPolling, isPartnerDocumentVisible } from "./partnerVisibilityPolling";
 
 /* oxlint-disable react/set-state-in-effect -- effects synchronise external partner order data. */
 
@@ -160,10 +161,15 @@ export default function OrdersBoard({
   }, [canRead, headers, onUnauthorized, reconcileKitchenOrders]);
 
   useEffect(() => {
-    void load();
-    const polling = window.setInterval(() => void load(), 30_000);
-    const ticker = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => { window.clearInterval(polling); window.clearInterval(ticker); };
+    if (typeof document === "undefined") { void load(); return; }
+    return createPartnerVisibilityPolling({
+      source: document,
+      scheduler: window,
+      onRefresh: () => {
+        void load();
+      },
+      onTick: () => setNow(Date.now()),
+    });
   }, [load]);
 
   useEffect(() => {
@@ -180,6 +186,11 @@ export default function OrdersBoard({
           setMessage(isCashOrder(event.payload as PartnerOrder)
             ? "Nuevo pedido contra reembolso: el rider cobrará al entregar."
             : "Nuevo pedido recibido. PIKI ya coordina el rider mientras lo preparas.");
+        }
+        // Keep the stream and kitchen signal live in the background, but defer
+        // the follow-up REST reconciliation until the operator returns.
+        if (typeof document !== "undefined" && !isPartnerDocumentVisible(document)) {
+          return;
         }
         void load();
       },

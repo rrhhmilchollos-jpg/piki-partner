@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ArrowRight, Eye, EyeOff, KeyRound, LockKeyhole, ShieldCheck } from "lucide-react";
 import { getApiErrorMessage, getNetworkErrorMessage } from "./api";
+import { readPasswordRecoveryLink } from "./passwordRecoveryLink";
 
 type AuthMode = "login" | "change" | "request" | "reset";
 
@@ -47,8 +48,9 @@ function PasswordField({
 }
 
 export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: Props) {
-  const [mode, setMode] = useState<AuthMode>(() => new URLSearchParams(window.location.search).has("reset") ? "reset" : "login");
-  const [token, setToken] = useState(() => new URLSearchParams(window.location.search).get("reset") || "");
+  const [recoveryLink] = useState(() => readPasswordRecoveryLink(window.location.href));
+  const [mode, setMode] = useState<AuthMode>(() => recoveryLink.token ? "reset" : "login");
+  const [token, setToken] = useState(recoveryLink.token);
   const [email, setEmail] = useState("");
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -57,6 +59,10 @@ export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: Props) 
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (recoveryLink.cleanPath) window.history.replaceState({}, "", recoveryLink.cleanPath);
+  }, [recoveryLink.cleanPath]);
 
   function switchMode(nextMode: AuthMode) {
     setMode(nextMode);
@@ -95,7 +101,6 @@ export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: Props) 
         setCurrent("");
         setNext("");
         setMessage("Contraseña actualizada. Ya puedes iniciar sesión.");
-        window.history.replaceState({}, "", window.location.pathname);
         return;
       }
       if (mode === "login") {
@@ -138,7 +143,7 @@ export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: Props) 
   return (
     <div className="login-layout">
       <section className="login-brand-panel">
-        <img src="/piki-rider-bee-512.png" alt="Rider abeja de PIKI" />
+        <img src="/piki-icon-512.png" alt="Logotipo de PIKI Partner Orders" />
         <p>PIKI PARTNER ORDERS</p>
         <h1>El pulso de tu local, siempre en marcha.</h1>
         <span>Gestiona pedidos, disponibilidad y operación desde una sola pantalla.</span>

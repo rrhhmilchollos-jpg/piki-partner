@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Capacitor } from "@capacitor/core";
 import { apiOrigin } from "./partnerApi";
-import { getPwaUpdateDecision, isValidReleasePolicy, shouldReloadAfterControllerChange, type ReleasePolicy } from "./pwaUpdatePolicy";
+import { isValidReleasePolicy, shouldReloadAfterControllerChange, type ReleasePolicy } from "./pwaUpdatePolicy";
 import { isPwaUpdateSafe, subscribeToPwaUpdateSafety } from "./pwaUpdateRuntime";
 import { PIKI_RELEASE } from "./release-meta";
 import { shouldShowPushConsent } from "./pushConsentPolicy";
+import { apiRequiresPikiSecurityUpdate, fetchPikiStaticRelease, getPikiWebTarget, shouldCheckPikiVersion, waitForPikiControllerChange, waitForPikiWaitingWorker } from "./pikiPwaUpdate";
 
 /* oxlint-disable react/set-state-in-effect -- effects reconcile release policy and browser notification state. */
 
@@ -18,7 +19,6 @@ async function registerWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) return null;
   try {
     const registration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
-    try { await registration.update(); } catch { /* A stale worker must not block partner operations. */ }
     return registration;
   } catch {
     return null;
@@ -68,6 +68,7 @@ function base64UrlToUint8Array(value: string): Uint8Array {
 }
 
 async function syncPushSubscription(promptPermission: boolean): Promise<void> {
+  if (nativeApp) throw new Error("Los avisos nativos se registran con la aplicación firmada; esta PWA no esperará un Service Worker.");
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
     throw new Error("Este navegador no admite notificaciones push.");
   }
@@ -106,7 +107,7 @@ function PushConsentControl() {
   const [busy, setBusy] = useState(false);
   const [visible, setVisible] = useState(false);
   const [authEpoch, setAuthEpoch] = useState(0);
-  const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const supported = !nativeApp && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
   useEffect(() => {
     const wake = () => setAuthEpoch((value) => value + 1);
@@ -159,11 +160,15 @@ export function PikiReleaseGate({ children }: { children: ReactNode }) {
   const controllerChangedRef = useRef(false);
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null);
   const waitingWorkerRef = useRef<ServiceWorker | null>(null);
+  const lastCheckAtRef = useRef(0);
+  const checkInFlightRef = useRef<Promise<void> | null>(null);
+  const [nativeSecurityUpdate, setNativeSecurityUpdate] = useState(false);
+  const manualActivationRequestedRef = useRef(false);
 
-  const reloadAfterWorkerChange = useCallback((buildId: string) => {
-    if (!navigator.onLine || !isPwaUpdateSafe()) return false;
+  const reloadAfterWorkerChange = useCallback((buildId: string, manualRetry = false) => {
+    if (!manualActivationRequestedRef.current || !navigator.onLine || !isPwaUpdateSafe()) return false;
     const key = reloadKey(buildId);
-    if (sessionStorage.getItem(key)) return false;
+    if (!manualRetry && sessionStorage.getItem(key)) return false;
 
     sessionStorage.setItem(key, "1");
     const url = new URL(window.location.href);
@@ -173,6 +178,7 @@ export function PikiReleaseGate({ children }: { children: ReactNode }) {
   }, []);
 
   const activateWaitingWorkerIfSafe = useCallback(() => {
+    if (!manualActivationRequestedRef.current) return;
     if (!isPwaUpdateSafe() || !navigator.onLine) return;
     const waiting = registrationRef.current?.waiting || waitingWorkerRef.current;
     if (!waiting) return;
@@ -183,12 +189,13 @@ export function PikiReleaseGate({ children }: { children: ReactNode }) {
   const settleControllerChange = useCallback(() => {
     if (!controllerChangedRef.current || !isPwaUpdateSafe()) return;
     controllerChangedRef.current = false;
-    reloadAfterWorkerChange(availableUpdate?.buildId || "worker");
+    reloadAfterWorkerChange(availableUpdate?.buildId || "worker", true);
   }, [availableUpdate?.buildId, reloadAfterWorkerChange]);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return undefined;
     const onControllerChange = () => {
+      if (!manualActivationRequestedRef.current) return;
       const wasControlled = hadControllerRef.current;
       hadControllerRef.current = true;
       // A first install takes control without replacing an existing app. It must
@@ -215,52 +222,54 @@ export function PikiReleaseGate({ children }: { children: ReactNode }) {
     settleControllerChange();
   }), [activateWaitingWorkerIfSafe, settleControllerChange]);
 
-  const check = useCallback(async () => {
-    if (nativeApp) {
-      setState("ready");
-      return;
-    }
-    try {
-      const registration = await registerWorker();
-      registrationRef.current = registration;
-      if (registration) {
-        const onWaiting = (worker: ServiceWorker | null) => {
-          waitingWorkerRef.current = worker;
-          activateWaitingWorkerIfSafe();
-        };
-        registration.addEventListener("updatefound", () => {
-          watchWaitingWorker(registration, onWaiting);
-        }, { once: true });
-        watchWaitingWorker(registration, onWaiting);
+  const check = useCallback(async (reason: "initial" | "focus" | "visible" | "interval" | "manual") => {
+    if (!shouldCheckPikiVersion({ now: Date.now(), lastCheckedAt: lastCheckAtRef.current, visible: document.visibilityState === "visible", reason, needsDeferredActivation: Boolean(pendingRequiredRef.current) })) return;
+    if (checkInFlightRef.current) return checkInFlightRef.current;
+    const work = (async () => {
+      lastCheckAtRef.current = Date.now();
+      try {
+        const policy = await fetchPolicy();
+        if (!isValidReleasePolicy(policy, PIKI_RELEASE.surface)) throw new Error("La política de versión no es válida.");
+        const securityRequired = apiRequiresPikiSecurityUpdate(policy, PIKI_RELEASE);
+        if (nativeApp) {
+          pendingRequiredRef.current = null;
+          setAvailableUpdate(securityRequired ? { version: String(policy.version), buildId: String(policy.buildId), required: true } : null);
+          setNativeSecurityUpdate(securityRequired);
+          setState(securityRequired ? "required" : "ready");
+          return;
+        }
+        const release = await fetchPikiStaticRelease(window.fetch.bind(window), window.location.origin, PIKI_RELEASE.surface);
+        const target = getPikiWebTarget(release, PIKI_RELEASE);
+        const nextUpdate = target ? { version: target.version, buildId: target.buildId, required: securityRequired } : null;
+        pendingRequiredRef.current = securityRequired ? nextUpdate : null;
+        setAvailableUpdate(nextUpdate);
+        setNativeSecurityUpdate(false);
+        setDetail("");
+        if (securityRequired && isPwaUpdateSafe()) setState("required");
+        else setState("ready");
+        if (target) {
+          const registration = await registerWorker();
+          registrationRef.current = registration;
+          if (registration) watchWaitingWorker(registration, (worker) => { waitingWorkerRef.current = worker; });
+        }
+      } catch (error) {
+        setDetail(error instanceof Error ? error.message : "No se pudo comprobar la versión.");
+        setState("error");
       }
-      const policy = await fetchPolicy();
-      if (!isValidReleasePolicy(policy, PIKI_RELEASE.surface)) throw new Error("La política de versión no es válida.");
-
-      const decision = getPwaUpdateDecision(policy, PIKI_RELEASE);
-      const nextUpdate = decision.updateAvailable
-        ? { version: decision.targetVersion, buildId: decision.targetBuildId, required: decision.required }
-        : null;
-      pendingRequiredRef.current = decision.required ? nextUpdate : null;
-      setAvailableUpdate(nextUpdate);
-      setDetail("");
-
-      if (decision.required && isPwaUpdateSafe()) setState("required");
-      else setState("ready");
-    } catch (error) {
-      setDetail(error instanceof Error ? error.message : "No se pudo comprobar la versión.");
-      setState("error");
-    }
-  }, [activateWaitingWorkerIfSafe]);
+    })();
+    checkInFlightRef.current = work;
+    try { await work; } finally { checkInFlightRef.current = null; }
+  }, []);
 
   useEffect(() => {
     if (nativeApp) {
-      void check();
+      void check("initial");
       return;
     }
-    void check();
-    const onFocus = () => void check();
+    void check("initial");
+    const onFocus = () => void check("focus");
     window.addEventListener("focus", onFocus);
-    const timer = window.setInterval(() => void check(), 5 * 60_000);
+    const timer = window.setInterval(() => void check("interval"), 5 * 60_000);
     return () => {
       window.removeEventListener("focus", onFocus);
       window.clearInterval(timer);
@@ -268,6 +277,12 @@ export function PikiReleaseGate({ children }: { children: ReactNode }) {
   }, [check]);
 
   const update = async () => {
+    if (nativeApp) return;
+    const target = availableUpdate;
+    if (!target || target.buildId === PIKI_RELEASE.buildId) {
+      setDetail("No se ha confirmado un nuevo build desde release.json de esta web. No se recargó la aplicación.");
+      return;
+    }
     if (!isPwaUpdateSafe()) {
       setDetail("La nueva versión PWA está preparada. Termina la operación o el formulario en curso para actualizar sin perder datos.");
       return;
@@ -277,23 +292,31 @@ export function PikiReleaseGate({ children }: { children: ReactNode }) {
       return;
     }
 
+    manualActivationRequestedRef.current = true;
     setUpdating(true);
     setDetail("");
     try {
+      const target = availableUpdate;
+      if (!target || target.buildId === PIKI_RELEASE.buildId) {
+        setDetail("No se ha confirmado un nuevo build desde release.json de esta web. No se recargó la aplicación.");
+        setUpdating(false);
+        return;
+      }
       const registration = await registerWorker();
       if (!registration) throw new Error("No se pudo iniciar la actualización PWA en este navegador.");
       registrationRef.current = registration;
-      watchWaitingWorker(registration, (worker) => {
-        waitingWorkerRef.current = worker;
-        activateWaitingWorkerIfSafe();
-      });
-
-      // If a worker was already active, update() has completed with the latest
-      // script. A single cache-busted navigation recovers a previously stale
-      // app shell; a waiting worker instead reloads on controllerchange.
-      if (!registration.waiting && !registration.installing) {
-        reloadAfterWorkerChange(availableUpdate?.buildId || "manual");
+      await Promise.race([registration.update().catch(() => undefined), new Promise<void>((resolve) => window.setTimeout(resolve, 8_000))]);
+      const waiting = await waitForPikiWaitingWorker(registration, 8_000);
+      manualActivationRequestedRef.current = true;
+      if (!waiting) {
+        reloadAfterWorkerChange(target.buildId, true);
+        return;
       }
+      const previousController = navigator.serviceWorker.controller;
+      const changed = waitForPikiControllerChange(navigator.serviceWorker, previousController, 8_000);
+      waiting.postMessage({ type: "SKIP_WAITING" });
+      if (await changed) reloadAfterWorkerChange(target.buildId, true);
+      else reloadAfterWorkerChange(target.buildId, true);
     } catch (error) {
       setDetail(error instanceof Error ? error.message : "No se pudo descargar la actualización PWA.");
       setUpdating(false);
@@ -304,9 +327,9 @@ export function PikiReleaseGate({ children }: { children: ReactNode }) {
   if (state === "required") return <main className="auth-page"><section className="orders-login-card">
     <p className="section-kicker">ACTUALIZACIÓN PWA NECESARIA</p>
     <h2>Actualiza para continuar</h2>
-    <p>Esta versión PWA ya no es compatible. Descargaremos la versión {availableUpdate?.version || "más reciente"} · {availableUpdate?.buildId || "nuevo build"} y recargaremos una sola vez.</p>
+    <p>{nativeSecurityUpdate ? `Instala la versión firmada ${availableUpdate?.version || "requerida"} desde el canal autorizado por PIKI o Google Play si es el canal configurado. Los recursos embebidos no se actualizan desde una PWA.` : `Esta versión PWA ya no es compatible. Descargaremos la versión ${availableUpdate?.version || "más reciente"} · ${availableUpdate?.buildId || "nuevo build"} y recargaremos una sola vez.`}</p>
     {detail && <p className="login-error">{detail}</p>}
-    <button type="button" className="login-submit" onClick={() => void update()} disabled={updating}>{updating ? "Actualizando PWA…" : "Actualizar PWA"}</button>
+    {!nativeSecurityUpdate && <button type="button" className="login-submit" onClick={() => void update()} disabled={updating}>{updating ? "Actualizando PWA…" : "Actualizar PWA"}</button>}
   </section></main>;
 
   return <>
