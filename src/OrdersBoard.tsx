@@ -20,6 +20,8 @@ export type PartnerOrder = PartnerKitchenOrder & {
   paymentMethod?: "stripe" | "bizum" | "cash";
   cashDueAtDelivery?: boolean;
   paymentState?: string;
+  assignmentState?: "unassigned" | "offered" | "assigned" | "expired" | "rejected";
+  riderId?: string | null;
   acceptanceDeadline?: string;
   preparationDeadline?: string;
   estimatedReadyAt?: string;
@@ -51,6 +53,13 @@ const filterLabels: Record<OrderFilter, string> = { all: "Todos", pending: "Nuev
 
 function isCashOrder(order: PartnerOrder): boolean {
   return Boolean(order.cashDueAtDelivery || order.paymentMethod === "cash");
+}
+
+function riderAssignmentLabel(order: PartnerOrder): string {
+  if (order.assignmentState === "offered") return "Rider avisado · esperando aceptación";
+  if (order.assignmentState === "assigned") return "Rider asignado";
+  if (order.assignmentState === "expired" || order.assignmentState === "rejected") return "Buscando otro Rider";
+  return "Buscando Rider disponible…";
 }
 
 function orderDeadline(order: PartnerOrder): number {
@@ -306,12 +315,12 @@ export default function OrdersBoard({
               </div>}
               <div className={`rider-readiness readiness-${order.status === "ready_for_pickup" ? "ready" : order.status === "pending" ? "pending" : "within_10_minutes"}`}>
                 <strong>Información para el Rider</strong>
-                {order.status === "ready_for_pickup" ? <span>✅ Listo para recoger · Rider avisado</span> : order.status === "pending" ? <span>Acepta el pedido para iniciar la preparación.</span> : <span>⏱️ Estará listo en {order.preparationMinutes ?? 4} minutos · Rider informado en tiempo real.</span>}
+                {order.status === "ready_for_pickup" ? <span>✅ Listo para recoger · {riderAssignmentLabel(order)}</span> : order.status === "pending" ? <span>Acepta el pedido para iniciar la preparación.</span> : <span>⏱️ Estará listo en {order.preparationMinutes ?? 4} minutos · {riderAssignmentLabel(order)}</span>}
               </div>
               {order.status === "accepted" && <label className="preparation-time-control">Tiempo estimado de preparación<select value={preparationMinutesByOrder[order._id] ?? 4} onChange={(event) => setPreparationMinutesByOrder((previous) => ({ ...previous, [order._id]: Number(event.target.value) }))}>{[4, 5, 6, 7, 8, 9, 10].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutos</option>)}</select></label>}
               <div className="order-card-actions">
                 {lane.action && <button type="button" className="order-action" disabled={!canOperate || Boolean(busyOrderId)} onClick={() => void move(order, lane.action!.to, preparationMinutesByOrder[order._id] ?? 4)}>{busyOrderId === order._id ? "Guardando…" : lane.action.label}{order.status === "accepted" ? ` · ${preparationMinutesByOrder[order._id] ?? 4} min` : ""}<ChevronRight size={17} /></button>}
-                {lane.status === "ready_for_pickup" && <button type="button" className="ready-label" disabled>Rider avisado</button>}
+                {lane.status === "ready_for_pickup" && <button type="button" className="ready-label" disabled>{riderAssignmentLabel(order)}</button>}
                 <button type="button" className="print-control" onClick={() => printOrder(order)} aria-label={`Imprimir pedido ${order.publicCode || order._id}`} title={order.status === "pending" ? "Acepta primero para comunicar el plazo al Rider" : "Imprimir ticket"}><Printer size={16} /></button>
               </div>
               {canCancel && ["pending", "accepted", "preparing"].includes(lane.status) && <button type="button" className="incident-control" disabled={Boolean(busyOrderId)} onClick={() => cancelOrder(order)}><XCircle size={15} /> Cancelar pedido</button>}
