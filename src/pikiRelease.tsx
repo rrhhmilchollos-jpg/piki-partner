@@ -334,7 +334,7 @@ export function PikiReleaseGate({ children }: { children: ReactNode }) {
   </section></main>;
 
   return <>
-    {state === "error" && <div className="release-warning" role="status">No se ha podido comprobar la versión PWA: {detail}. Conservamos tu sesión y los datos actuales.</div>}
+
     {state !== "error" && availableUpdate && <div className="release-warning" role="status">
       <span>Nueva versión PWA disponible: {availableUpdate.version} · {availableUpdate.buildId}.</span>
       {availableUpdate.required ? <span> Se actualizará al terminar la operación en curso.</span> : <button type="button" className="link-button" onClick={() => void update()} disabled={updating}>{updating ? "Actualizando PWA…" : "Actualizar PWA"}</button>}
