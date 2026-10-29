@@ -1,13 +1,31 @@
-const BUILD_ID = "63109e3725ac";
+const BUILD_ID = "0c8032f522da";
 const CACHE_PREFIX = "piki-partner-";
 const CACHE_NAME = `${CACHE_PREFIX}${BUILD_ID}`;
-const APP_SHELL = ["/","/manifest.json","/piki-rider-bee-192.png","/piki-rider-bee-512.png"];
-const CONTROL_PATHS = new Set(["/sw.js", "/release.json", "/manifest.json", "/manifest-pda.json"]);
+const APP_SHELL = ["/","/manifest.json","/piki-icon-192.png","/piki-icon-512.png"];
+const CONTROL_PATHS = new Set(["/sw.js", "/release.json", "/manifest.json"]);
+
+function isControlRequest(request, url) {
+  return CONTROL_PATHS.has(url.pathname)
+    || url.pathname.startsWith("/api/")
+    || url.pathname.startsWith("/auth/")
+    || request.headers.has("authorization")
+    || request.headers.get("cache-control") === "no-store";
+}
+
+function canCache(response) {
+  const cacheControl = response.headers.get("cache-control") || "";
+  return response.ok
+    && response.type === "basic"
+    && !response.headers.has("authorization")
+    && !response.headers.has("set-cookie")
+    && !/\b(?:no-store|private)\b/i.test(cacheControl);
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
     await Promise.allSettled(APP_SHELL.map((asset) => cache.add(asset)));
+    // Keep the worker waiting. The safe, explicit UI owns activation.
   })());
 });
 
@@ -16,27 +34,32 @@ self.addEventListener("activate", (event) => {
     const keys = await caches.keys();
     await Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME).map((key) => caches.delete(key)));
     await self.clients.claim();
+    const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    clients.forEach((client) => client.postMessage({ type: "PIKI_SW_ACTIVATED", buildId: BUILD_ID }));
   })());
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data?.type === "SKIP_WAITING") void self.skipWaiting();
+  if (event.data?.type === "SKIP_WAITING") event.waitUntil(self.skipWaiting());
+  if (event.data?.type === "GET_BUILD_ID") event.source?.postMessage({ type: "PIKI_SW_BUILD_ID", buildId: BUILD_ID });
 });
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin || CONTROL_PATHS.has(url.pathname) || url.pathname.startsWith("/piki-api/") || url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/") || request.headers.has("authorization")) return;
+  if (url.origin !== self.location.origin || isControlRequest(request, url)) return;
+
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).catch(async () => (await caches.match("/")) || Response.error()));
+    event.respondWith(fetch(new Request(request, { cache: "no-store" })).catch(async () => (await caches.match("/")) || Response.error()));
     return;
   }
+
   event.respondWith((async () => {
     const cached = await caches.match(request);
     if (cached) return cached;
     const response = await fetch(request);
-    if (response.ok && response.type === "basic") {
+    if (canCache(response) && url.pathname.startsWith("/assets/")) {
       const cache = await caches.open(CACHE_NAME);
       event.waitUntil(cache.put(request, response.clone()));
     }

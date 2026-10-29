@@ -24,10 +24,13 @@ export function usePartnerOrderAlarm() {
 
   const updateCount = useCallback(() => setActiveCount(pendingOrderIds.current.size), []);
 
-  const prepareAudio = useCallback(async () => {
+  const prepareAudio = useCallback(async (userInitiated = true) => {
     try {
       const AudioContextCtor = window.AudioContext || (window as WebkitWindow).webkitAudioContext;
       if (!AudioContextCtor) return false;
+      // Browsers reject AudioContext creation/resume until a user gesture.
+      // Incoming SSE events must not try to create one and spam the console.
+      if (!audioContext.current && !userInitiated) return false;
       const context = audioContext.current ?? new AudioContextCtor();
       audioContext.current = context;
       if (context.state !== "running") await context.resume();
@@ -39,7 +42,7 @@ export function usePartnerOrderAlarm() {
   }, []);
 
   const ringOnce = useCallback(async () => {
-    const isReady = await prepareAudio();
+    const isReady = await prepareAudio(false);
     const context = audioContext.current;
     if (!isReady || !context) return;
 
