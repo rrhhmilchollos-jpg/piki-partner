@@ -7,14 +7,17 @@ import { connectPikiRealtime, type PikiRealtimeConnectionState } from "./realtim
 import PrintablePartnerTicket from "./PrintablePartnerTicket";
 import { visibleOrderReference } from "./orderReference";
 import { createPartnerVisibilityPolling, isPartnerDocumentVisible } from "./partnerVisibilityPolling";
+import SunmiPdaBoard from "./SunmiPdaBoard";
+import { printOrderToSunmi } from "./sunmiPrinter";
 
 /* oxlint-disable react/set-state-in-effect -- effects synchronise external partner order data. */
 
 export type PartnerOrder = PartnerKitchenOrder & {
   publicCode?: string;
   createdAt: string;
-  customer?: { name?: string } | null;
+  customer?: { name?: string; allergies?: string } | null;
   deliveryAddress?: string;
+  deliveryNote?: string;
   items?: { name?: string; quantity?: number; unitPriceCents?: number; selectedOptions?: { optionName?: string }[] }[];
   totalCents?: number;
   paymentMethod?: "stripe" | "bizum" | "cash";
@@ -233,13 +236,16 @@ export default function OrdersBoard({
       const response = await fetch(`${apiOrigin}/api/v1/partners/kitchen/orders/${order._id}/status`, {
         method: "PATCH",
         headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ status, ...(status === "preparing" ? { preparationMinutes: preparationMinutes ?? 4 } : {}) }),
+        body: JSON.stringify({ status, ...(["accepted", "preparing"].includes(status) ? { preparationMinutes: preparationMinutes ?? 20 } : {}) }),
       });
       const payload = await response.json().catch(() => ({})) as { error?: string; message?: string };
       if (response.status === 401) { onUnauthorized(); return; }
       if (response.status === 403) { setMessage("No tienes permiso para realizar esta acción en el pedido."); return; }
       if (!response.ok) throw new Error(payload.message || payload.error || `HTTP ${response.status}`);
-      if (status === "accepted") resolveOrder(order._id);
+      if (status === "accepted") {
+        resolveOrder(order._id);
+        await printOrder({ ...order, status: "accepted" });
+      }
       setMessage(status === "accepted" ? "Pedido aceptado. Empieza la preparación cuando el equipo esté listo." : "Pedido actualizado correctamente.");
       await load();
     } catch (error) {
@@ -257,10 +263,19 @@ export default function OrdersBoard({
     void move(order, "cancelled");
   };
 
-  const printOrder = (order: PartnerOrder) => {
+  const printOrder = async (order: PartnerOrder) => {
     if (order.status === "pending") {
-      setMessage("Antes de imprimir, acepta el pedido para avisar al Rider del plazo máximo de 10 minutos.");
+      setMessage("Antes de imprimir, acepta el pedido para avisar al Rider del plazo elegido (15–45 minutos).");
       return;
+    }
+    try {
+      const printedNatively = await printOrderToSunmi(order);
+      if (printedNatively) {
+        setMessage("Comanda enviada a la impresora Sunmi.");
+        return;
+      }
+    } catch {
+      setMessage("La impresora Sunmi no respondió; abrimos la impresión web de respaldo.");
     }
     setPrintingOrder(order);
   };
@@ -268,6 +283,24 @@ export default function OrdersBoard({
   const counts = useMemo(() => ({ all: orders.length, pending: orders.filter((order) => order.status === "pending").length, accepted: orders.filter((order) => order.status === "accepted").length, preparing: orders.filter((order) => order.status === "preparing").length, ready_for_pickup: orders.filter((order) => order.status === "ready_for_pickup").length, picked_up: orders.filter((order) => order.status === "picked_up").length, on_the_way: orders.filter((order) => order.status === "on_the_way").length }), [orders]);
   const isRealtimeConnected = realtimeState.status === "connected";
   const connectionLabel = realtimeStatusLabel(realtimeState, now);
+  const pdaOrder = orders.find((order) => order.status === "pending") || orders.find((order) => ["accepted", "preparing"].includes(order.status)) || orders.find((order) => order.status === "ready_for_pickup") || null;
+  if (pdaMode) return <SunmiPdaBoard
+    order={pdaOrder}
+    loading={loading}
+    message={message}
+    busy={Boolean(busyOrderId)}
+    canOperate={canOperate}
+    activeCount={activeCount}
+    audioReady={audioReady}
+    realtimeState={realtimeState}
+    connectionLabel={connectionLabel}
+    preparationMinutes={pdaOrder ? preparationMinutesByOrder[pdaOrder._id] ?? 20 : 20}
+    onPreparationMinutesChange={(minutes) => { if (pdaOrder) setPreparationMinutesByOrder((previous) => ({ ...previous, [pdaOrder._id]: minutes })); }}
+    onAccept={() => { if (pdaOrder) void move(pdaOrder, "accepted", preparationMinutesByOrder[pdaOrder._id] ?? 20); }}
+    onReady={() => { if (pdaOrder) void move(pdaOrder, "ready_for_pickup", preparationMinutesByOrder[pdaOrder._id] ?? 20); }}
+    onPrint={() => { if (pdaOrder) void printOrder(pdaOrder); }}
+    onEnableAudio={() => { void prepareAudio(); }}
+  />;
   return <section className={`orders-workspace ${pdaMode ? "pda-orders-workspace" : ""}`} aria-label={pdaMode ? "PDA operativa PIKI Partner" : "Pedidos PIKI Partner Orders"}>
     <header className="orders-heading">
       <div>
@@ -315,11 +348,11 @@ export default function OrdersBoard({
               </div>}
               <div className={`rider-readiness readiness-${order.status === "ready_for_pickup" ? "ready" : order.status === "pending" ? "pending" : "within_10_minutes"}`}>
                 <strong>Información para el Rider</strong>
-                {order.status === "ready_for_pickup" ? <span>✅ Listo para recoger · {riderAssignmentLabel(order)}</span> : order.status === "pending" ? <span>Acepta el pedido para iniciar la preparación.</span> : <span>⏱️ Estará listo en {order.preparationMinutes ?? 4} minutos · {riderAssignmentLabel(order)}</span>}
+                {order.status === "ready_for_pickup" ? <span>✅ Listo para recoger · {riderAssignmentLabel(order)}</span> : order.status === "pending" ? <span>Acepta el pedido para iniciar la preparación.</span> : <span>⏱️ Estará listo en {order.preparationMinutes ?? 20} minutos · {riderAssignmentLabel(order)}</span>}
               </div>
-              {order.status === "accepted" && <label className="preparation-time-control">Tiempo estimado de preparación<select value={preparationMinutesByOrder[order._id] ?? 4} onChange={(event) => setPreparationMinutesByOrder((previous) => ({ ...previous, [order._id]: Number(event.target.value) }))}>{[4, 5, 6, 7, 8, 9, 10].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutos</option>)}</select></label>}
+              {order.status === "accepted" && <label className="preparation-time-control">Tiempo estimado de preparación<select value={preparationMinutesByOrder[order._id] ?? 20} onChange={(event) => setPreparationMinutesByOrder((previous) => ({ ...previous, [order._id]: Number(event.target.value) }))}>{[15, 20, 30, 45].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutos</option>)}</select></label>}
               <div className="order-card-actions">
-                {lane.action && <button type="button" className="order-action" disabled={!canOperate || Boolean(busyOrderId)} onClick={() => void move(order, lane.action!.to, preparationMinutesByOrder[order._id] ?? 4)}>{busyOrderId === order._id ? "Guardando…" : lane.action.label}{order.status === "accepted" ? ` · ${preparationMinutesByOrder[order._id] ?? 4} min` : ""}<ChevronRight size={17} /></button>}
+                {lane.action && <button type="button" className="order-action" disabled={!canOperate || Boolean(busyOrderId)} onClick={() => void move(order, lane.action!.to, preparationMinutesByOrder[order._id] ?? 20)}>{busyOrderId === order._id ? "Guardando…" : lane.action.label}{order.status === "accepted" ? ` · ${preparationMinutesByOrder[order._id] ?? 20} min` : ""}<ChevronRight size={17} /></button>}
                 {lane.status === "ready_for_pickup" && <button type="button" className="ready-label" disabled>{riderAssignmentLabel(order)}</button>}
                 <button type="button" className="print-control" onClick={() => printOrder(order)} aria-label={`Imprimir pedido ${order.publicCode || order._id}`} title={order.status === "pending" ? "Acepta primero para comunicar el plazo al Rider" : "Imprimir ticket"}><Printer size={16} /></button>
               </div>
