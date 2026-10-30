@@ -206,8 +206,9 @@ export default function OrdersBoard({
         }
         void load();
       },
+      onUnauthorized,
     });
-  }, [canRead, locationId, load, notifyPaidOrder, token]);
+  }, [canRead, locationId, load, notifyPaidOrder, onUnauthorized, token]);
 
   useEffect(() => {
     if (!printingOrder) return;

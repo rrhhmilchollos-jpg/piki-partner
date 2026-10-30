@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPikiRealtimeReconnectDelay } from "./realtime";
+import { getPikiRealtimeReconnectDelay, isPikiRealtimeUnauthorized } from "./realtime";
 
 describe("PIKI realtime reconnect backoff", () => {
   it("doubles the retry delay before reaching its safety cap", () => {
@@ -17,5 +17,11 @@ describe("PIKI realtime reconnect backoff", () => {
     expect(getPikiRealtimeReconnectDelay(Number.NaN)).toBe(1_000);
     expect(getPikiRealtimeReconnectDelay(6)).toBe(30_000);
     expect(getPikiRealtimeReconnectDelay(99)).toBe(30_000);
+  });
+
+  it("only treats an expired authentication token as an unauthorized session", () => {
+    expect(isPikiRealtimeUnauthorized(401)).toBe(true);
+    expect(isPikiRealtimeUnauthorized(403)).toBe(false);
+    expect(isPikiRealtimeUnauthorized(503)).toBe(false);
   });
 });

@@ -22,6 +22,10 @@ export function getPikiRealtimeReconnectDelay(attempt: number): number {
   return Math.min(RECONNECT_MAX_DELAY_MS, RECONNECT_BASE_DELAY_MS * (2 ** Math.min(normalizedAttempt - 1, 5)));
 }
 
+export function isPikiRealtimeUnauthorized(status: number): boolean {
+  return status === 401;
+}
+
 function readLastEventId(storageKey: string): string {
   try { return sessionStorage.getItem(storageKey) || ""; } catch { return ""; }
 }
@@ -67,6 +71,7 @@ export function connectPikiRealtime(input: {
   surface: "partner" | "fleet" | "admin" | "rider";
   onEvent: (event: PikiRealtimeEvent) => void;
   onState?: (state: PikiRealtimeConnectionState) => void;
+  onUnauthorized?: () => void;
 }) {
   const controller = new AbortController();
   const storageKey = `piki-realtime-last-event:${input.surface}:${input.locationId || "assigned"}`;
@@ -106,6 +111,11 @@ export function connectPikiRealtime(input: {
           },
           credentials: "include",
         });
+        if (isPikiRealtimeUnauthorized(response.status)) {
+          input.onUnauthorized?.();
+          controller.abort();
+          break;
+        }
         if (!response.ok || !response.body) throw new Error(`SSE_HTTP_${response.status}`);
 
         attempt = 0;
