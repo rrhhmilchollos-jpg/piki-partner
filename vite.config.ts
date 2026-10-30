@@ -8,7 +8,7 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       "/piki-api": {
-        target: "https://api.pikidelivery.com",
+        target: "https://piki-api-37nr.onrender.com",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/piki-api/, ""),
       },
