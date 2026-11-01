@@ -2,17 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, LoaderCircle, Pencil, Save, X } from "lucide-react";
 import { apiOrigin, partnerHeaders, type PartnerLocation } from "./partnerApi";
 import { apiErrorMessage } from "./api";
+import { editablePartnerProfilePayload, type EditablePartnerProfile } from "./partnerProfilePayload";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
-
-type EditableProfile = {
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-  locality: string;
-  cuisine: string;
-  category: string;
-};
 
 type Props = {
   token: string;
@@ -22,7 +13,7 @@ type Props = {
   onSaved: (profile: Partial<PartnerLocation>) => void;
 };
 
-function draftFromLocation(location: PartnerLocation): EditableProfile {
+function draftFromLocation(location: PartnerLocation): EditablePartnerProfile {
   return {
     name: location.name || "",
     email: location.email || "",
@@ -56,7 +47,7 @@ function profileFromPayload(value: unknown): Partial<PartnerLocation> {
 }
 
 export default function PartnerAccountSummary({ token, location, enabled, onUnauthorized, onSaved }: Props) {
-  const [draft, setDraft] = useState<EditableProfile>(() => draftFromLocation(location));
+  const [draft, setDraft] = useState<EditablePartnerProfile>(() => draftFromLocation(location));
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -77,7 +68,7 @@ export default function PartnerAccountSummary({ token, location, enabled, onUnau
     if (response.status === 401) { onUnauthorized(); return; }
     if (!response.ok) throw new Error(await response.text());
     const profile = profileFromPayload(await response.json());
-    setDraft((current) => ({ ...current, ...Object.fromEntries(Object.keys(current).map((key) => [key, profile[key as keyof PartnerLocation] ?? current[key as keyof EditableProfile]])) }) as EditableProfile);
+    setDraft((current) => ({ ...current, ...Object.fromEntries(Object.keys(current).map((key) => [key, profile[key as keyof PartnerLocation] ?? current[key as keyof EditablePartnerProfile]])) }) as EditablePartnerProfile);
   };
 
   const startEditing = async () => {
@@ -109,14 +100,14 @@ export default function PartnerAccountSummary({ token, location, enabled, onUnau
       const response = await fetch(`${apiOrigin}/api/v1/partners/profile`, {
         method: "PATCH",
         headers: { ...partnerHeaders(token, location.id), "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
+        body: JSON.stringify(editablePartnerProfilePayload(draft)),
       });
       const payload = await response.json().catch(() => ({}));
       if (response.status === 401) { onUnauthorized(); return; }
       if (!response.ok) throw new Error(apiErrorMessage(payload, response.status, "No se pudieron guardar los datos del partner."));
       const profile = profileFromPayload(payload);
       onSaved(profile);
-      setDraft((current) => ({ ...current, ...Object.fromEntries(Object.keys(current).map((key) => [key, profile[key as keyof PartnerLocation] ?? current[key as keyof EditableProfile]])) }) as EditableProfile);
+      setDraft((current) => ({ ...current, ...Object.fromEntries(Object.keys(current).map((key) => [key, profile[key as keyof PartnerLocation] ?? current[key as keyof EditablePartnerProfile]])) }) as EditablePartnerProfile);
       setEditing(false);
       setMessage("Datos guardados correctamente y sincronizados con PIKI.");
     } catch (cause) {
@@ -126,7 +117,7 @@ export default function PartnerAccountSummary({ token, location, enabled, onUnau
     }
   };
 
-  const field = (key: keyof EditableProfile, label: string, type = "text", placeholder?: string) => (
+  const field = (key: keyof EditablePartnerProfile, label: string, type = "text", placeholder?: string) => (
     <label className="partner-account-field" key={key}>
       <span>{label}</span>
       <input type={type} value={draft[key]} placeholder={placeholder} disabled={!enabled || busy} onChange={(event) => setDraft((current) => ({ ...current, [key]: event.target.value }))} />
