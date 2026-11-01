@@ -10,6 +10,7 @@ import ArchivedOrdersBoard from "./ArchivedOrdersBoard";
 import PerformanceView from "./PerformanceView";
 import PartnerOnboarding from "./PartnerOnboarding";
 import GoogleBusinessSettings from "./GoogleBusinessSettings";
+import PartnerAccountSummary from "./PartnerAccountSummary";
 import { apiOrigin, displayRole, hasPermission, normalisePartnerProfile, partnerHeaders, type PartnerLocation, type PartnerProfile } from "./partnerApi";
 import { visiblePartnerViews, type PartnerView } from "./partnerNavigation";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
@@ -99,17 +100,6 @@ function normaliseOpeningHours(value: unknown): OpeningHours {
   })) as OpeningHours;
 }
 
-function PartnerAccountSummary({ location }: { location: PartnerLocation }) {
-  return <section className="partner-account-summary" aria-label="Configuración efectiva del establecimiento">
-    <div><p className="section-kicker">MI CUENTA · DATOS CONFIRMADOS</p><h1>{location.name}</h1><p>Estos datos proceden de la configuración guardada por PIKI Superadmin. Se actualizan al volver a cargar tu sesión.</p></div>
-    <div className="partner-account-grid">
-      <div><span>Dirección</span><strong>{location.address || "Pendiente"}</strong></div><div><span>Localidad</span><strong>{location.locality || "Pendiente"}</strong></div>
-      <div><span>Cocina / categoría</span><strong>{[location.cuisine, location.category].filter(Boolean).join(" · ") || "Pendiente"}</strong></div><div><span>Contacto</span><strong>{location.phone || location.email || "Pendiente"}</strong></div>
-      <div><span>Tarifa de entrega</span><strong>{((location.deliveryFeeCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}</strong></div><div><span>Comisión PIKI</span><strong>{((location.commissionRateBps || 0) / 100).toFixed(2)}%</strong></div>
-      <div><span>Estado comercial</span><strong>{location.availabilityStatus === "coming_soon" ? "Disponible próximamente" : location.isOpen ? "Activo y operativo" : "Pausado"}</strong></div><div><span>Promocionado</span><strong>{location.promoted ? "Sí" : "No"}</strong></div>
-    </div>
-  </section>;
-}
 function StoreHoursSettings({ token, location, enabled, onUnauthorized }: { token: string; location: PartnerLocation; enabled: boolean; onUnauthorized: () => void }) {
   const [hours, setHours] = useState<OpeningHours>(defaultHours);
   const [busy, setBusy] = useState(false);
@@ -263,7 +253,7 @@ function PartnerOperationsApp() {
         {currentView === "catalog" && canMenu && <MenuEditor key={location.id} apiOrigin={apiOrigin} token={token} locationId={location.id} onUnauthorized={clearSession} />}
         {currentView === "menu" && <MenuAvailability token={token} locationId={location.id} canRead={canMenuRead} canEdit={canMenu} onUnauthorized={clearSession} />}
         {currentView === "performance" && <PerformanceView token={token} locationId={location.id} canRead={canMetrics} onUnauthorized={clearSession} />}
-        {currentView === "settings" && <><PartnerAccountSummary location={location} /><StoreHoursSettings token={token} location={location} enabled={canStore} onUnauthorized={clearSession} /></>}
+        {currentView === "settings" && <><PartnerAccountSummary token={token} location={location} enabled={canStore} onUnauthorized={clearSession} onSaved={(patch) => setProfile((current) => current ? { ...current, locations: current.locations.map((item) => item.id === location.id ? { ...item, ...patch } : item) } : current)} /><StoreHoursSettings token={token} location={location} enabled={canStore} onUnauthorized={clearSession} /></>}
       </div>
     </main>
   </div>;
