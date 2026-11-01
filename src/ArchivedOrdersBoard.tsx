@@ -51,7 +51,11 @@ export default function ArchivedOrdersBoard({ token, locationId, canRead, onUnau
     finally { setLoading(false); }
   }, [canRead, headers, onUnauthorized]);
 
-  useEffect(() => { void load(false); }, [load, locationId]);
+  useEffect(() => {
+    // Reload when the selected partner location changes.
+    // oxlint-disable-next-line react/set-state-in-effect
+    void load(false);
+  }, [load, locationId]);
 
   return <section className="orders-workspace" aria-label="Historial de pedidos PIKI Partner Orders">
     <header className="orders-heading">

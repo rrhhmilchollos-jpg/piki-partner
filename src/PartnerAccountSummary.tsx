@@ -55,6 +55,8 @@ export default function PartnerAccountSummary({ token, location, enabled, onUnau
   const displayProfile = useMemo(() => draftFromLocation(location), [location]);
 
   useEffect(() => {
+    // The draft must reset when the active partner location changes or a save is confirmed.
+    // oxlint-disable-next-line react/set-state-in-effect
     setDraft(displayProfile);
     setEditing(false);
     setMessage("");

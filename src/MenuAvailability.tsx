@@ -57,7 +57,7 @@ export default function MenuAvailability({ token, locationId, canRead, canEdit, 
   useEffect(() => {
     if (!canRead || !token || !locationId) return undefined;
     return connectCatalogRealtime(apiOrigin, () => { void load(); });
-  }, [apiOrigin, canRead, load, locationId, token]);
+  }, [canRead, load, locationId, token]);
 
   const categories = useMemo(() => ["Todos", ...Array.from(new Set(items.map((item) => item.category || "General")))], [items]);
   const visible = items.filter((item) => (filter === "Todos" || (item.category || "General") === filter) && item.name.toLowerCase().includes(query.toLowerCase()));

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ExternalLink, RefreshCw } from "lucide-react";
 import { apiOrigin, partnerHeaders } from "./partnerApi";
 
@@ -7,9 +7,13 @@ type Connection = { status: string; googleAccountName?: string | null; googleLoc
 type GoogleLocation = { name: string; title?: string; accountName?: string };
 export default function GoogleBusinessSettings({ token, locationId, openingHours, canEdit, onUnauthorized, onMessage }: Props) {
   const [connection, setConnection] = useState<Connection | null>(null); const [configured, setConfigured] = useState(false); const [locations, setLocations] = useState<GoogleLocation[]>([]); const [busy, setBusy] = useState(false); const [message, setMessage] = useState("");
-  const headers = partnerHeaders(token, locationId);
-  const load = useCallback(async () => { const response = await fetch(`${apiOrigin}/api/v1/partners/google-business/status`, { headers, cache: "no-store" }); if (response.status === 401) { onUnauthorized(); return; } const data = await response.json().catch(() => ({})) as { configured?: boolean; connection?: Connection | null }; if (response.ok) { setConfigured(Boolean(data.configured)); setConnection(data.connection || null); } }, [locationId, onUnauthorized, token]);
-  useEffect(() => { void load(); }, [load]);
+  const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
+  const load = useCallback(async () => { const response = await fetch(`${apiOrigin}/api/v1/partners/google-business/status`, { headers, cache: "no-store" }); if (response.status === 401) { onUnauthorized(); return; } const data = await response.json().catch(() => ({})) as { configured?: boolean; connection?: Connection | null }; if (response.ok) { setConfigured(Boolean(data.configured)); setConnection(data.connection || null); } }, [headers, onUnauthorized]);
+  useEffect(() => {
+    // Loading remote state on mount and location changes is intentional.
+    // oxlint-disable-next-line react/set-state-in-effect
+    void load();
+  }, [load]);
   const connect = async () => { setBusy(true); setMessage(""); try { const response = await fetch(`${apiOrigin}/api/v1/partners/google-business/connect`, { headers }); const data = await response.json().catch(() => ({})) as { authorizationUrl?: string; message?: string }; if (response.status === 401) { onUnauthorized(); return; } if (!response.ok || !data.authorizationUrl) throw new Error(data.message || "No se pudo iniciar la conexión con Google."); window.location.href = data.authorizationUrl; } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo iniciar la conexión con Google."); setBusy(false); } };
   const discover = async () => { setBusy(true); setMessage(""); try { const response = await fetch(`${apiOrigin}/api/v1/partners/google-business/locations`, { headers }); const data = await response.json().catch(() => ({})) as { locations?: GoogleLocation[]; message?: string }; if (!response.ok) throw new Error(data.message || "No se pudieron cargar las ubicaciones de Google."); setLocations(data.locations || []); } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudieron cargar las ubicaciones."); } finally { setBusy(false); } };
   const selectLocation = async (location: GoogleLocation) => { setBusy(true); try { const response = await fetch(`${apiOrigin}/api/v1/partners/google-business/location`, { method: "PATCH", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ accountName: location.accountName, locationName: location.name, title: location.title }) }); if (!response.ok) throw new Error("No se pudo seleccionar la ubicación."); await load(); setMessage("Ubicación de Google vinculada."); } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo vincular la ubicación."); } finally { setBusy(false); } };
