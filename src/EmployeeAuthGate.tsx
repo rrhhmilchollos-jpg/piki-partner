@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { getStoredEmail, storeEmail } from "./authStorage";
 import { ArrowRight, Eye, EyeOff, KeyRound, LockKeyhole, ShieldCheck } from "lucide-react";
 import { getApiErrorMessage, getNetworkErrorMessage } from "./api";
 import { readPasswordRecoveryLink } from "./passwordRecoveryLink";
@@ -51,7 +52,7 @@ export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: Props) 
   const [recoveryLink] = useState(() => readPasswordRecoveryLink(window.location.href));
   const [mode, setMode] = useState<AuthMode>(() => recoveryLink.token ? "reset" : "login");
   const [token, setToken] = useState(recoveryLink.token);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => getStoredEmail());
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [showCurrent, setShowCurrent] = useState(false);
@@ -111,7 +112,7 @@ export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: Props) 
         });
         const data = await response.json().catch(() => ({})) as { accessToken?: string; requiresPasswordChange?: boolean };
         if (!response.ok || !data.accessToken) throw new Error(await getApiErrorMessage(response, "No se ha podido iniciar sesión."));
-        setToken(data.accessToken);
+        setToken(data.accessToken); if (email.includes("@")) storeEmail(email);
         if (data.requiresPasswordChange) setMode("change");
         else onAuthenticated(data.accessToken);
         return;
