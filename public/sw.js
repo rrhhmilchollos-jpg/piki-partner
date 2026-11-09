@@ -1,4 +1,4 @@
-const BUILD_ID = "efb7a8effbba";
+const BUILD_ID = "7f26fbff3b3f";
 const CACHE_PREFIX = "piki-partner-";
 const CACHE_NAME = `${CACHE_PREFIX}${BUILD_ID}`;
 const APP_SHELL = ["/","/manifest.json","/piki-icon-192.png","/piki-icon-512.png"];

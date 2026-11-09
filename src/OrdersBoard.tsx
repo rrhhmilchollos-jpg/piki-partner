@@ -28,6 +28,8 @@ export type PartnerOrder = PartnerKitchenOrder & {
   acceptanceDeadline?: string;
   preparationDeadline?: string;
   estimatedReadyAt?: string;
+  pickupQrUrl?: string | null;
+  pickupPin?: string | null;
   partnerPrepDeadlineAt?: string | null;
   preparationMinutes?: number;
   riderTracking?: { riderId: string; name?: string; vehicle?: string; status?: string; latitude?: number | null; longitude?: number | null; lastLocationAt?: string | null; fresh?: boolean } | null;
@@ -349,7 +351,7 @@ export default function OrdersBoard({
               </div>}
               <div className={`rider-readiness readiness-${order.status === "ready_for_pickup" ? "ready" : order.status === "pending" ? "pending" : "within_10_minutes"}`}>
                 <strong>Información para el Rider</strong>
-                {order.status === "ready_for_pickup" ? <span>✅ Listo para recoger · {riderAssignmentLabel(order)}</span> : order.status === "pending" ? <span>Acepta el pedido para iniciar la preparación.</span> : <span>⏱️ Estará listo en {order.preparationMinutes ?? 20} minutos · {riderAssignmentLabel(order)}</span>}
+                {order.status === "ready_for_pickup" ? <span>✅ Listo para recoger · {riderAssignmentLabel(order)}{order.pickupPin ? <><br />PIN de recogida: <b>{order.pickupPin}</b></> : null}</span> : order.status === "pending" ? <span>Acepta el pedido para iniciar la preparación.</span> : <span>⏱️ Estará listo en {order.preparationMinutes ?? 20} minutos · {riderAssignmentLabel(order)}</span>}
               </div>
               {order.status === "accepted" && <label className="preparation-time-control">Tiempo estimado de preparación<select value={preparationMinutesByOrder[order._id] ?? 20} onChange={(event) => setPreparationMinutesByOrder((previous) => ({ ...previous, [order._id]: Number(event.target.value) }))}>{[15, 20, 30, 45].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutos</option>)}</select></label>}
               <div className="order-card-actions">
