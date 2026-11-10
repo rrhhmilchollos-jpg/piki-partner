@@ -15,6 +15,7 @@ import { printOrderToSunmi } from "./sunmiPrinter";
 export type PartnerOrder = PartnerKitchenOrder & {
   publicCode?: string;
   createdAt: string;
+  restaurantName?: string;
   customer?: { name?: string; allergies?: string } | null;
   deliveryAddress?: string;
   deliveryNote?: string;
