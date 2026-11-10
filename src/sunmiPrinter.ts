@@ -5,6 +5,8 @@ type SunmiPrintBridge = {
   printEscPos?: (payload: { text: string; orderId: string }) => Promise<void> | void;
   printText?: (payload: { text: string; orderId: string }) => Promise<void> | void;
   print?: (payload: { text: string; orderId: string }) => Promise<void> | void;
+  startNotificationService?: () => Promise<void> | void;
+  notifyOrder?: (payload: { title: string; body: string; orderId: string }) => Promise<void> | void;
 };
 
 const nativeSunmiPrinter = registerPlugin<SunmiPrintBridge>("SunmiPrinter");
@@ -59,6 +61,18 @@ export async function printOrderToSunmi(order: PartnerOrder): Promise<boolean> {
   const print = bridge?.print || bridge?.printEscPos || bridge?.printText || nativeSunmiPrinter.print;
   if (!print) return false;
   await print({ text: escPosTicket(order), orderId: order._id });
+  return true;
+}
+
+/** Sends a high-priority native Android alert when running in the SUNMI APK. */
+export async function notifyPartnerOrder(order: PartnerOrder): Promise<boolean> {
+  const bridge = typeof window !== "undefined" ? (window.SunmiPrinter || window.PikiSunmiPrinter) : undefined;
+  if (!Capacitor.isNativePlatform() || !bridge?.notifyOrder) return false;
+  await bridge.notifyOrder({
+    title: "Nuevo pedido PIKI",
+    body: `Pedido ${order.publicCode || order._id} pendiente de aceptación`,
+    orderId: order._id,
+  });
   return true;
 }
 

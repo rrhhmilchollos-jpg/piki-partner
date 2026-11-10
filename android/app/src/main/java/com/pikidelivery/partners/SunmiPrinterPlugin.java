@@ -20,6 +20,7 @@ public class SunmiPrinterPlugin extends Plugin {
 
     @Override
     public void load() {
+        PartnerNotificationService.start(getContext());
         printerCallback = new InnerPrinterCallback() {
             @Override
             protected void onConnected(SunmiPrinterService service) {
@@ -49,6 +50,29 @@ public class SunmiPrinterPlugin extends Plugin {
         }
         printerService = null;
         super.handleOnDestroy();
+    }
+
+    @PluginMethod
+    public void startNotificationService(PluginCall call) {
+        try {
+            PartnerNotificationService.start(getContext());
+            call.resolve();
+        } catch (Exception exception) {
+            call.reject("No se pudo iniciar el servicio de notificaciones", exception);
+        }
+    }
+
+    @PluginMethod
+    public void notifyOrder(PluginCall call) {
+        String title = call.getString("title", "Nuevo pedido PIKI");
+        String body = call.getString("body", "Hay un pedido pendiente de aceptación");
+        String orderId = call.getString("orderId", "");
+        try {
+            PartnerNotificationService.notifyOrder(getContext(), title, body, orderId);
+            call.resolve();
+        } catch (Exception exception) {
+            call.reject("No se pudo mostrar el aviso del pedido", exception);
+        }
     }
 
     @PluginMethod

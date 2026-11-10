@@ -8,7 +8,7 @@ import PrintablePartnerTicket from "./PrintablePartnerTicket";
 import { visibleOrderReference } from "./orderReference";
 import { createPartnerVisibilityPolling, isPartnerDocumentVisible } from "./partnerVisibilityPolling";
 import SunmiPdaBoard from "./SunmiPdaBoard";
-import { printOrderToSunmi } from "./sunmiPrinter";
+import { notifyPartnerOrder, printOrderToSunmi } from "./sunmiPrinter";
 
 /* oxlint-disable react/set-state-in-effect -- effects synchronise external partner order data. */
 
@@ -197,7 +197,14 @@ export default function OrdersBoard({
       onState: setRealtimeState,
       onEvent: (event) => {
         if (event.type === "order.awaiting_partner_acceptance") {
-          notifyPaidOrder(String(event.payload.orderId ?? ""));
+          const orderId = String(event.payload.orderId ?? "");
+          notifyPaidOrder(orderId);
+          void notifyPartnerOrder({
+            _id: orderId,
+            status: "pending",
+            createdAt: new Date().toISOString(),
+            publicCode: String(event.payload.publicCode ?? orderId),
+          });
           setMessage(isCashOrder(event.payload as PartnerOrder)
             ? "Nuevo pedido contra reembolso: el rider cobrará al entregar."
             : "Nuevo pedido recibido. PIKI ya coordina el rider mientras lo preparas.");
