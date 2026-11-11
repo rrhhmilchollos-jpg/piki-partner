@@ -14,7 +14,7 @@ type MenuItem = {
   image?: string;
   available?: boolean;
   description?: string;
-  allergens?: string[];
+  allergens?: string[] | null;
   modifiers?: unknown[];
   vegetarian?: boolean;
   popular?: boolean;

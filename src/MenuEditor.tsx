@@ -21,25 +21,12 @@ import { bytesToBase64, MENU_IMAGE_ACCEPT, prepareMenuImage, sha256File, validat
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
 import { connectCatalogRealtime } from "./catalogRealtime";
 
-type ModifierOption = {
-  id: string;
-  name: string;
-  price: number;
-  available: boolean;
-};
-type Modifier = {
-  id: string;
-  name: string;
-  /** Campo antiguo: precio único del grupo. Se sigue enviando por compatibilidad. */
-  price: number;
-  required: boolean;
-  /** Campo antiguo: solo los nombres de las opciones disponibles. */
-  options: string[];
-  /** Opciones con precio y disponibilidad propios. */
-  optionItems: ModifierOption[];
-  minSelections: number;
-  maxSelections: number;
-};
+import {
+  allergenSummary, normalizeItem, prepareMenuJsonImport, safePrice,
+  sanitizeEditedModifiers, setAllergenDeclaration,
+} from "./menuImport";
+import type { Item, Modifier, ModifierOption } from "./menuImport";
+
 type MenuAsset = {
   id: string;
   fileName: string;
@@ -50,19 +37,6 @@ type MenuAsset = {
   scanEngine?: string;
   scannedAt?: string | null;
   url: string;
-};
-type Item = {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  category: string;
-  image: string;
-  allergens: string[];
-  modifiers: Modifier[];
-  available: boolean;
-  vegetarian: boolean;
-  popular: boolean;
 };
 type ImportDraft = {
   id: string;
@@ -81,7 +55,7 @@ const blank = (): Item => ({
   price: 0,
   category: "General",
   image: "",
-  allergens: [],
+  allergens: null,
   modifiers: [],
   available: true,
   vegetarian: false,
@@ -105,102 +79,6 @@ const blankModifier = (): Modifier => ({
   minSelections: 0,
   maxSelections: 1,
 });
-const safePrice = (value: unknown, fallback = 0) => {
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 0 ? number : fallback;
-};
-
-/** Convierte un grupo guardado (formato antiguo o nuevo) al formato del editor. */
-function normalizeModifier(raw: Partial<Modifier>): Modifier {
-  const id = typeof raw.id === "string" && raw.id ? raw.id : uid("modifier");
-  const groupPrice = safePrice(raw.price);
-  const source: unknown[] =
-    Array.isArray(raw.optionItems) && raw.optionItems.length
-      ? raw.optionItems
-      : Array.isArray(raw.options)
-        ? raw.options
-        : [];
-  const optionItems = source
-    .map((entry, position): ModifierOption => {
-      const fallbackId = `${id}-opt-${position + 1}`;
-      if (typeof entry === "string") {
-        return { id: fallbackId, name: entry, price: groupPrice, available: true };
-      }
-      const record = (entry ?? {}) as Partial<ModifierOption>;
-      return {
-        id: typeof record.id === "string" && record.id ? record.id : fallbackId,
-        name: String(record.name ?? ""),
-        price: safePrice(record.price, groupPrice),
-        available: record.available !== false,
-      };
-    })
-    .filter((option) => option.name.trim());
-  const minSelections =
-    Number.isInteger(raw.minSelections) && (raw.minSelections as number) >= 0
-      ? (raw.minSelections as number)
-      : raw.required
-        ? 1
-        : 0;
-  // Grupo antiguo sin máximo: si es obligatorio se elige solo una opción;
-  // si es opcional se permite elegir varias.
-  const maxSelections =
-    Number.isInteger(raw.maxSelections) && (raw.maxSelections as number) >= Math.max(1, minSelections)
-      ? (raw.maxSelections as number)
-      : minSelections > 0
-        ? Math.max(1, minSelections)
-        : Math.max(1, optionItems.length);
-  return {
-    id,
-    name: raw.name ?? "",
-    price: groupPrice,
-    required: minSelections > 0,
-    options: optionItems.filter((option) => option.available).map((option) => option.name),
-    optionItems,
-    minSelections,
-    maxSelections,
-  };
-}
-
-/** Limpia un grupo antes de guardarlo y rellena los campos antiguos. */
-function sanitizeModifier(modifier: Modifier): Modifier {
-  const optionItems = modifier.optionItems
-    .map((option) => ({
-      ...option,
-      name: option.name.trim(),
-      price: safePrice(option.price),
-    }))
-    .filter((option) => option.name);
-  const count = optionItems.length;
-  const minSelections = Math.min(
-    modifier.required ? Math.max(1, modifier.minSelections) : 0,
-    count,
-  );
-  const maxSelections = Math.min(
-    Math.max(1, minSelections, Math.floor(modifier.maxSelections) || 1),
-    Math.max(1, count),
-  );
-  const availablePrices = optionItems
-    .filter((option) => option.available)
-    .map((option) => option.price);
-  return {
-    ...modifier,
-    name: modifier.name.trim(),
-    required: minSelections > 0,
-    minSelections,
-    maxSelections,
-    optionItems,
-    options: optionItems.filter((option) => option.available).map((option) => option.name),
-    price: availablePrices.length ? Math.min(...availablePrices) : 0,
-  };
-}
-
-function normalizeItem(item: Item): Item {
-  return {
-    ...item,
-    allergens: Array.isArray(item.allergens) ? item.allergens : [],
-    modifiers: Array.isArray(item.modifiers) ? item.modifiers.map(normalizeModifier) : [],
-  };
-}
 
 /** Nombre único por contenido: una foto nueva nunca pisa a otra con el mismo nombre. */
 function uniqueImageName(fileName: string, sha256: string): string {
@@ -439,41 +317,15 @@ export default function MenuEditor({
     }
   };
   const importMenuJson = async (file: File) => {
+    if (loading || saving || uploading || importing) return;
     setImporting(true);
     try {
       if (file.size > 1_000_000) throw new Error("El archivo es demasiado grande (máximo 1 MB).");
       const parsed = JSON.parse(await file.text()) as unknown;
-      const rows = Array.isArray(parsed) ? parsed : (parsed as { items?: unknown })?.items;
-      if (!Array.isArray(rows) || !rows.length) throw new Error("El archivo no contiene productos.");
-      const stamp = Date.now().toString(36);
-      const prepared = rows.map((row, index): Item => {
-        const raw = (row ?? {}) as Partial<Item>;
-        const name = String(raw.name ?? "").trim();
-        const price = Number(raw.price);
-        if (!name || !Number.isFinite(price) || price < 0) {
-          throw new Error(`Producto ${index + 1}: revisa el nombre y el precio.`);
-        }
-        return normalizeItem({
-          id: `item-${stamp}-${index}`,
-          name,
-          description: String(raw.description ?? "").trim(),
-          price,
-          category: String(raw.category ?? "").trim() || "General",
-          // Las fotos se suben una a una desde la ficha del producto.
-          image: "",
-          allergens: Array.isArray(raw.allergens) ? raw.allergens.map(String) : [],
-          modifiers: Array.isArray(raw.modifiers) ? (raw.modifiers as Modifier[]) : [],
-          available: raw.available !== false,
-          vegetarian: Boolean(raw.vegetarian),
-          popular: Boolean(raw.popular),
-        });
-      });
-      const known = new Set(items.map((item) => `${item.category.toLowerCase()}|${item.name.toLowerCase()}`));
-      const fresh = prepared.filter((item) => !known.has(`${item.category.toLowerCase()}|${item.name.toLowerCase()}`));
-      if (!fresh.length) return setMessage("Todos los productos del archivo ya están en la carta.");
-      const skipped = prepared.length - fresh.length;
-      if (!window.confirm(`Se añadirán ${fresh.length} productos a la carta del local activo${skipped ? ` (${skipped} ya existentes se omiten)` : ""}. ¿Continuar?`)) return;
-      await persistMenu([...items, ...fresh], `${fresh.length} productos importados. Revisa extras, alérgenos y fotos antes de dar por buena la carta.`);
+      const result = prepareMenuJsonImport(items, parsed);
+      if (!result.added && !result.updated) return setMessage("Los IDs del archivo ya están en la carta sin cambios.");
+      if (!window.confirm(`Se añadirán ${result.added} productos y se actualizarán ${result.updated} por ID en la carta del local activo. Los productos fuera del lote se conservarán sin cambios. ¿Continuar?`)) return;
+      await persistMenu(result.items, `${result.added} productos añadidos y ${result.updated} actualizados por ID. Revisa extras, alérgenos y fotos antes de dar por buena la carta.`);
     } catch (error) {
       setMessage(error instanceof SyntaxError ? "El archivo no es un JSON válido." : error instanceof Error ? error.message : "No se pudo importar el archivo.");
     } finally {
@@ -483,9 +335,7 @@ export default function MenuEditor({
   const save = async () => {
     if (!draft || !draft.name.trim() || !Number.isFinite(draft.price) || draft.price < 0)
       return setMessage("Completa el nombre y un precio válido.");
-    const modifiers = draft.modifiers
-      .filter((modifier) => modifier.name.trim() || modifier.optionItems.some((option) => option.name.trim()))
-      .map(sanitizeModifier);
+    const modifiers = sanitizeEditedModifiers(draft, items.find((item) => item.id === draft.id));
     const incomplete = modifiers.find((modifier) => !modifier.name || !modifier.optionItems.length);
     if (incomplete) return setMessage("Cada grupo de extras necesita un nombre y al menos una opción.");
     const cleaned = { ...draft, modifiers };
@@ -572,7 +422,7 @@ export default function MenuEditor({
             <input
               type="file"
               accept=".json,application/json"
-              disabled={importing || saving || uploading}
+              disabled={loading || importing || saving || uploading}
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) void importMenuJson(file);
@@ -716,8 +566,7 @@ export default function MenuEditor({
                     </span>
                     <small>
                       {item.available ? "Disponible para pedidos" : "Pausado"} ·{" "}
-                      {item.modifiers.length} extras · {item.allergens.length}{" "}
-                      alérgenos
+                      {item.modifiers.length} extras · {allergenSummary(item.allergens)}
                     </small>
                   </div>
                   <div className="product-actions">
@@ -858,9 +707,21 @@ export default function MenuEditor({
                 )}
               </label>
               <label>
+                Estado de la declaración de alérgenos
+                <select
+                  value={draft.allergens === null ? "unknown" : "declared"}
+                  onChange={(event) => updateDraft(setAllergenDeclaration(draft, event.target.value === "declared"))}
+                >
+                  <option value="unknown">Desconocido / sin declaración</option>
+                  <option value="declared">Declaración del restaurante (lista)</option>
+                </select>
+                <span className="field-hint">Una lista vacía es una declaración explícita; no equivale a desconocido ni certifica ausencia de alérgenos.</span>
+              </label>
+              <label>
                 Alérgenos <span className="field-hint">separados por coma</span>
                 <input
-                  value={draft.allergens.join(", ")}
+                  value={draft.allergens?.join(", ") ?? ""}
+                  disabled={draft.allergens === null}
                   onChange={(event) =>
                     updateDraft({
                       allergens: event.target.value
@@ -869,7 +730,7 @@ export default function MenuEditor({
                         .filter(Boolean),
                     })
                   }
-                  placeholder="Gluten, leche, frutos secos"
+                  placeholder={draft.allergens === null ? "Alérgenos desconocidos" : "Gluten, leche, frutos secos"}
                 />
               </label>
               <div className="checkbox-grid">
