@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/piki-api/:path*",
-      "destination": "https://piki-api-37nr.onrender.com/:path*"
+      "destination": "https://api.pikidelivery.com/:path*"
     }
   ],
   "headers": [

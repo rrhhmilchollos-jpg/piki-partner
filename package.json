@@ -9,7 +9,8 @@
     "check": "tsc -b --pretty false",
     "lint": "oxlint",
     "test": "vitest run --passWithNoTests",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:android": "python3 scripts/test-android-identity.py && python3 scripts/test-android-workflows.py && node --test scripts/test-android-signing.mjs scripts/test-play-release.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",

@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "locale": "es-ES",
+  "packageName": "com.pikidelivery.partners",
+  "playAppName": "PIKI Partner Orders",
+  "canonicalIcon": "resources/play-icon.png",
+  "canonicalSha256": "3ffb058ed7eda202826fe6a7cd03b4e0e8ece89e1b37af84fb4ae5eb5363a096",
+  "canonicalSourceUrl": "https://lh3.googleusercontent.com/CdS7tgZ7uGU1jUVAALh7XS4THZeGfacAJKynwa9cNZ7hmlNxAd-KerKUZODEcfXmso9ogNB_tabIWM-Bt0XOLg",
+  "adaptiveBackground": "#FDD722",
+  "foregroundSafeSquareDp": 46
+}

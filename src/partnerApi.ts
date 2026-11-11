@@ -1,6 +1,11 @@
-// Production must always use the Vercel same-origin rewrite. This deliberately ignores a
-// legacy VITE_API_URL project variable that could otherwise reintroduce browser CORS failures.
-export const apiOrigin = (import.meta.env.PROD ? "/piki-api" : (import.meta.env.VITE_API_URL ?? "/piki-api")).replace(/\/$/, "");
+import { Capacitor } from "@capacitor/core";
+import { resolvePartnerApiOrigin } from "./partnerApiOrigin";
+
+export const apiOrigin = resolvePartnerApiOrigin({
+  production: import.meta.env.PROD,
+  native: Capacitor.isNativePlatform(),
+  configured: import.meta.env.VITE_API_URL,
+});
 
 export type PartnerLocation = {
   id: string;
