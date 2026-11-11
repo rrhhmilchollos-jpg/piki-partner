@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BellRing, Bike, Car, ChevronRight, CircleAlert, Clock3, MapPinned, MessageSquare, Printer, RefreshCw, Send, Scooter, Wifi, WifiOff, XCircle } from "lucide-react";
-import { PartnerOrderAlarmBanner, type PartnerKitchenOrder, usePartnerOrderAlarm } from "./PartnerOrderAlarm";
+import { PartnerOrderAlarmBanner, type PartnerKitchenOrder } from "./PartnerOrderAlarm";
 import { apiOrigin, partnerHeaders } from "./partnerApi";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
-import { connectPikiRealtime, type PikiRealtimeConnectionState } from "./realtime";
+import type { PikiRealtimeConnectionState } from "./realtime";
 import PrintablePartnerTicket from "./PrintablePartnerTicket";
 import { visibleOrderReference } from "./orderReference";
-import { createPartnerVisibilityPolling, isPartnerDocumentVisible } from "./partnerVisibilityPolling";
+import { usePartnerKitchenReception } from "./PartnerKitchenReception";
 import SunmiPdaBoard from "./SunmiPdaBoard";
-import { notifyPartnerOrder, printOrderToSunmi } from "./sunmiPrinter";
+import { printOrderToSunmi } from "./sunmiPrinter";
 
 /* oxlint-disable react/set-state-in-effect -- effects synchronise external partner order data. */
 
@@ -128,12 +128,8 @@ export default function OrdersBoard({
   pdaMode?: boolean;
   onUnauthorized: () => void;
 }) {
-  const [orders, setOrders] = useState<PartnerOrder[]>([]);
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [operationMessage, setMessage] = useState("");
   const [busyOrderId, setBusyOrderId] = useState("");
-  const [realtimeState, setRealtimeState] = useState<PikiRealtimeConnectionState>({ status: "connecting", attempt: 0 });
-  const [now, setNow] = useState<number>(() => Date.now());
   const [activeFilter, setActiveFilter] = useState<OrderFilter>("all");
   const [supportOpen, setSupportOpen] = useState(false);
   const [supportBusy, setSupportBusy] = useState(false);
@@ -141,84 +137,10 @@ export default function OrdersBoard({
   const [printingOrder, setPrintingOrder] = useState<PartnerOrder | null>(null);
   const [preparationMinutesByOrder, setPreparationMinutesByOrder] = useState<Record<string, number>>({});
   const transitionLockRef = useRef<string | null>(null);
-  const { activeCount, audioReady, prepareAudio, reconcileKitchenOrders, notifyPaidOrder, resolveOrder } = usePartnerOrderAlarm();
+  const { orders, loading, receptionMessage, realtimeState, now, load, activeCount, audioReady, prepareAudio, resolveOrder, notifyCancelledOrder } = usePartnerKitchenReception();
+  const message = [receptionMessage, operationMessage].filter(Boolean).join(" · ");
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
   usePwaUpdateBlocker("partner-order-operation", Boolean(busyOrderId) || supportBusy || supportOpen);
-
-  const load = useCallback(async () => {
-    if (!canRead) {
-      setOrders([]);
-      setMessage("Este perfil no tiene permiso para consultar pedidos de este local.");
-      setLoading(false);
-      return;
-    }
-    try {
-      const response = await fetch(`${apiOrigin}/api/v1/partners/kitchen/orders`, { headers, cache: "no-store" });
-      if (response.status === 401) { onUnauthorized(); return; }
-      if (response.status === 403) {
-        setOrders([]);
-        setMessage("No tienes permiso para consultar pedidos de este local.");
-        return;
-      }
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const payload = await response.json() as { orders?: PartnerOrder[] };
-      const next = payload.orders ?? [];
-      setOrders(next);
-      reconcileKitchenOrders(next);
-      setMessage("");
-    } catch (error) {
-      setMessage(error instanceof Error && error.message.startsWith("HTTP")
-        ? `No se ha podido sincronizar pedidos (${error.message}).`
-        : "Sin conexión con PIKI. Conservamos la última lista mientras vuelve la señal.");
-    } finally {
-      setLoading(false);
-    }
-  }, [canRead, headers, onUnauthorized, reconcileKitchenOrders]);
-
-  useEffect(() => {
-    if (typeof document === "undefined") { void load(); return; }
-    return createPartnerVisibilityPolling({
-      source: document,
-      scheduler: window,
-      onRefresh: () => {
-        void load();
-      },
-      onTick: () => setNow(Date.now()),
-    });
-  }, [load]);
-
-  useEffect(() => {
-    if (!canRead) return undefined;
-    return connectPikiRealtime({
-      apiOrigin,
-      token,
-      locationId,
-      surface: "partner",
-      onState: setRealtimeState,
-      onEvent: (event) => {
-        if (event.type === "order.awaiting_partner_acceptance") {
-          const orderId = String(event.payload.orderId ?? "");
-          notifyPaidOrder(orderId);
-          void notifyPartnerOrder({
-            _id: orderId,
-            status: "pending",
-            createdAt: new Date().toISOString(),
-            publicCode: String(event.payload.publicCode ?? orderId),
-          });
-          setMessage(isCashOrder(event.payload as PartnerOrder)
-            ? "Nuevo pedido contra reembolso: el rider cobrará al entregar."
-            : "Nuevo pedido recibido. PIKI ya coordina el rider mientras lo preparas.");
-        }
-        // Keep the stream and kitchen signal live in the background, but defer
-        // the follow-up REST reconciliation until the operator returns.
-        if (typeof document !== "undefined" && !isPartnerDocumentVisible(document)) {
-          return;
-        }
-        void load();
-      },
-      onUnauthorized,
-    });
-  }, [canRead, locationId, load, notifyPaidOrder, onUnauthorized, token]);
 
   useEffect(() => {
     if (!printingOrder) return;
@@ -258,6 +180,8 @@ export default function OrdersBoard({
         await printOrder({ ...order, status: "accepted" });
       }
       setMessage(status === "accepted" ? "Pedido aceptado. Empieza la preparación cuando el equipo esté listo." : "Pedido actualizado correctamente.");
+      if (status === "cancelled") notifyCancelledOrder(order._id, order.publicCode);
+      else if (status !== "pending") resolveOrder(order._id);
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se ha podido actualizar el pedido.");

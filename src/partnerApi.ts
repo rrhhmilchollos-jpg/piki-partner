@@ -24,12 +24,17 @@ export type PartnerLocation = {
   isOpen?: boolean;
   roles: string[];
   permissions: string[];
+  tenant?: string;
+  lifecycle?: string;
 };
 
 export type PartnerProfile = {
   name: string;
   email: string;
   locations: PartnerLocation[];
+  tenant?: string;
+  lifecycle?: string;
+  accessIssue?: string;
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -58,13 +63,32 @@ function firstText(...input: unknown[]): string {
   return input.map(text).find(Boolean) ?? "";
 }
 
+function tenantOf(source: JsonRecord): string {
+  const tenant = record(source.tenant);
+  return firstText(source.tenantId, tenant.id, tenant._id, source.tenant);
+}
+
+function lifecycleOf(source: JsonRecord): string {
+  return firstText(record(source.lifecycle).status, source.lifecycle, source.lifecycleStatus).toLowerCase();
+}
+
+// Compatibility adapter, not a new backend lifecycle. Explicit unknown/non-operational
+// lifecycle values fail closed until the backend owner confirms their meaning.
+function accessActive(source: JsonRecord): boolean {
+  const lifecycle = lifecycleOf(source);
+  return source.isActive !== false && source.disabled !== true
+    && (!lifecycle || ["active", "approved", "operational", "enabled"].includes(lifecycle));
+}
+
 function normaliseLocation(value: unknown): Omit<PartnerLocation, "roles" | "permissions"> | null {
   const source = record(value);
-  const id = firstText(source.id, source._id, source.restaurantId, source.locationId, source.storeId, source.slug);
+  const id = firstText(source.id, source._id, source.restaurantId, source.locationId, source.storeId);
   const name = firstText(source.name, source.restaurantName, source.locationName, source.storeName, source.tradeName);
-  if (!id && !name) return null;
+  if (!id || !accessActive(source)) return null;
   return {
-    id: id || name.toLocaleLowerCase("es-ES").replace(/\s+/g, "-"),
+    id,
+    tenant: tenantOf(source) || undefined,
+    lifecycle: lifecycleOf(source) || undefined,
     partnerCode: firstText(source.partnerCode, source.partnerId, source.onboardingCode) || undefined,
     name: name || "Establecimiento asignado",
     cuisine: firstText(source.cuisine) || undefined,
@@ -95,30 +119,25 @@ function rolePermissions(roles: string[]): string[] {
   return [...result];
 }
 
-function scopePermissions(roles: string[], directPermissions: string[]): string[] {
-  return [...new Set([...directPermissions, ...rolePermissions(roles)])];
-}
-
 function scopeRoles(source: JsonRecord, fallbackRoles: string[]): string[] {
   const roles = [
     ...stringList(source.roles),
     firstText(source.role, source.employeeRole),
   ].filter(Boolean);
-  return roles.length ? [...new Set(roles)] : fallbackRoles;
-}
-
-function scopeDirectPermissions(source: JsonRecord, fallbackPermissions: string[]): string[] {
-  const permissions = stringList(source.permissions);
-  return permissions.length ? [...new Set(permissions)] : fallbackPermissions;
+  return Array.isArray(source.roles) || roles.length ? [...new Set(roles)] : fallbackRoles;
 }
 
 function normaliseMembership(value: unknown, fallbackRoles: string[], fallbackPermissions: string[]): PartnerLocation | null {
   const source = record(value);
+  if (!accessActive(source)) return null;
   const location = normaliseLocation(source.location || source.restaurant || source.store || source);
   if (!location) return null;
+  if (tenantOf(source) && location.tenant && tenantOf(source) !== location.tenant) return null;
   const roles = scopeRoles(source, fallbackRoles);
-  const permissions = scopePermissions(roles, scopeDirectPermissions(source, fallbackPermissions));
-  return { ...location, roles, permissions };
+  const ownRoles = Array.isArray(source.roles) || Boolean(firstText(source.role, source.employeeRole));
+  const permissions = Array.isArray(source.permissions) ? stringList(source.permissions)
+    : ownRoles ? rolePermissions(roles) : fallbackPermissions;
+  return { ...location, tenant: tenantOf(source) || location.tenant, lifecycle: lifecycleOf(source) || location.lifecycle, roles, permissions };
 }
 
 function mergeLocations(locations: PartnerLocation[]): PartnerLocation[] {
@@ -143,6 +162,10 @@ export function normalisePartnerProfile(value: unknown): PartnerProfile {
   const payload = record(value);
   const employee = record(payload.employee || payload.user || payload.profile);
   const partner = record(payload.partner || employee.partner);
+  const tenant = firstText(tenantOf(employee), tenantOf(payload), tenantOf(partner));
+  const lifecycle = firstText(lifecycleOf(employee), lifecycleOf(payload), lifecycleOf(partner));
+  const tenantConflict = [employee, payload, partner].some((source) => tenantOf(source) && tenantOf(source) !== tenant);
+  const active = [employee, payload, partner].every(accessActive);
   const globalRoles = [
     ...stringList(payload.roles),
     ...stringList(employee.roles),
@@ -152,6 +175,12 @@ export function normalisePartnerProfile(value: unknown): PartnerProfile {
     ...stringList(payload.permissions),
     ...stringList(employee.permissions),
   ];
+  const effectiveGlobalPermissions = Array.isArray(payload.permissions) || Array.isArray(employee.permissions)
+    ? [...new Set(globalPermissions)] : rolePermissions(globalRoles);
+  // If more than one explicit list is returned, intersect them; [] revokes access.
+  const idScopes = [payload, employee, partner].filter((source) => Array.isArray(source.restaurantIds))
+    .map((source) => new Set(stringList(source.restaurantIds)));
+  const assignedIds = idScopes.length ? new Set([...idScopes[0]].filter((id) => idScopes.every((scope) => scope.has(id)))) : null;
   const membershipInput = [
     ...values(payload.memberships),
     ...values(payload.assignments),
@@ -159,7 +188,7 @@ export function normalisePartnerProfile(value: unknown): PartnerProfile {
     ...values(employee.assignments),
   ];
   const memberships = membershipInput
-    .map((membership) => normaliseMembership(membership, globalRoles, globalPermissions))
+    .map((membership) => normaliseMembership(membership, globalRoles, effectiveGlobalPermissions))
     .filter((location): location is PartnerLocation => Boolean(location));
 
   const locationInput = [
@@ -176,13 +205,31 @@ export function normalisePartnerProfile(value: unknown): PartnerProfile {
   const directLocations = locationInput
     .map(normaliseLocation)
     .filter((location): location is Omit<PartnerLocation, "roles" | "permissions"> => Boolean(location))
-    .map((location) => ({ ...location, roles: globalRoles, permissions: scopePermissions(globalRoles, globalPermissions) }));
+    .map((location) => ({ ...location, roles: globalRoles, permissions: effectiveGlobalPermissions }));
+  // An explicit membership list is authoritative, including an empty or invalid one.
+  const membershipProvided = [payload, employee].some((source) => Array.isArray(source.memberships) || Array.isArray(source.assignments));
+  const candidates = membershipProvided ? memberships : directLocations;
+  if (!membershipProvided && assignedIds) {
+    for (const id of assignedIds) {
+      if (!candidates.some((location) => location.id === id) && !locationInput.some((value) => {
+        const source = record(value);
+        return firstText(source.id, source._id, source.restaurantId, source.locationId, source.storeId) === id;
+      })) candidates.push({ id, name: "Establecimiento asignado", tenant: tenant || undefined, roles: globalRoles, permissions: effectiveGlobalPermissions });
+    }
+  }
+  const locations = candidates.filter((location) => (!assignedIds || assignedIds.has(location.id))
+    && (!tenant || !location.tenant || location.tenant === tenant));
 
   return {
     name: firstText(employee.name, employee.fullName, payload.name, payload.fullName, employee.email, payload.email) || "Equipo Partner",
     email: firstText(employee.email, payload.email),
-    // No synthetic location or permissive fallback is granted. The server must send an assignment.
-    locations: mergeLocations(memberships.length ? memberships : directLocations),
+    tenant: tenant || undefined,
+    lifecycle: lifecycle || undefined,
+    accessIssue: tenantConflict ? "La respuesta de acceso contiene tenants incompatibles. PIKI debe revisar la asignación."
+      : !active ? "La cuenta o expediente no tiene un lifecycle operativo confirmado. Contacta con PIKI."
+      : undefined,
+    // Never grant by name, slug, local storage or a client-created Kazoku account.
+    locations: active && !tenantConflict ? mergeLocations(locations) : [],
   };
 }
 

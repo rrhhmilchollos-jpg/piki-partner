@@ -2,6 +2,7 @@ import { AlertTriangle, Bike, Clock3, Printer, Volume2, Wifi, WifiOff } from "lu
 import type { PartnerOrder } from "./OrdersBoard";
 import type { PikiRealtimeConnectionState } from "./realtime";
 import { visibleOrderReference } from "./orderReference";
+import { isPartnerNativeAndroid } from "./partnerNativeNotifications";
 
 const prepOptions = [15, 20, 30, 45] as const;
 
@@ -45,6 +46,7 @@ export default function SunmiPdaBoard({
   const notes = (order?.deliveryNote || "").trim();
   const hasAlert = Boolean(notes || order?.customer?.allergies);
   const connected = realtimeState.status === "connected";
+  const nativeAndroid = isPartnerNativeAndroid();
 
   return <section className="sunmi-pda-shell" aria-label="Piki Partner Orders para Sunmi">
     <header className="sunmi-pda-header">
@@ -52,7 +54,7 @@ export default function SunmiPdaBoard({
       <div className={`sunmi-connection ${connected ? "is-connected" : ""}`}><span>{connected ? <Wifi size={17} /> : <WifiOff size={17} />}</span>{connectionLabel}</div>
     </header>
 
-    {activeCount > 0 && <button type="button" className={`sunmi-alarm ${audioReady ? "is-ready" : "needs-gesture"}`} onClick={onEnableAudio} aria-label="Activar sonido de pedidos nuevos"><Volume2 size={22} /><span><strong>{activeCount} pedido{activeCount === 1 ? "" : "s"} nuevo{activeCount === 1 ? "" : "s"}</strong><small>{audioReady ? "Alarma activa · toca Aceptar para detenerla" : "Toca aquí para activar el sonido de cocina"}</small></span></button>}
+    {activeCount > 0 && <button type="button" className={`sunmi-alarm ${audioReady ? "is-ready" : "needs-gesture"}`} onClick={onEnableAudio} aria-label={nativeAndroid ? "Revisar canal Android de pedidos nuevos" : "Activar sonido de pedidos nuevos"}><Volume2 size={22} /><span><strong>{activeCount} pedido{activeCount === 1 ? "" : "s"} nuevo{activeCount === 1 ? "" : "s"}</strong><small>{nativeAndroid ? "Avisos sujetos a los ajustes Android · toca aquí para revisar el canal" : audioReady ? "Alarma activa · toca Aceptar para detenerla" : "Toca aquí para activar el sonido de cocina"}</small></span></button>}
 
     {loading ? <div className="sunmi-empty">Sincronizando pedidos…</div> : !order ? <div className="sunmi-empty"><Clock3 size={32} /><strong>Esperando el siguiente pedido</strong><span>Los pedidos pagados aparecerán automáticamente aquí.</span></div> : <>
       <div className="sunmi-alert-stack">{hasAlert && <div className="sunmi-special-alert"><AlertTriangle size={24} /><span><strong>ALERGIA / NOTA ESPECIAL</strong><small>{order.customer?.allergies || notes}</small></span></div>}</div>

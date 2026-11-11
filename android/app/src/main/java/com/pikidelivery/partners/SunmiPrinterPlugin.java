@@ -20,7 +20,6 @@ public class SunmiPrinterPlugin extends Plugin {
 
     @Override
     public void load() {
-        PartnerNotificationService.start(getContext());
         printerCallback = new InnerPrinterCallback() {
             @Override
             protected void onConnected(SunmiPrinterService service) {
@@ -55,8 +54,11 @@ public class SunmiPrinterPlugin extends Plugin {
     @PluginMethod
     public void startNotificationService(PluginCall call) {
         try {
-            PartnerNotificationService.start(getContext());
-            call.resolve();
+            // Legacy bridge compatibility: local channels only, NOT a background receiver.
+            PartnerNotificationService.createChannels(getContext());
+            JSObject result = new JSObject();
+            result.put("backgroundReceiver", false);
+            call.resolve(result);
         } catch (Exception exception) {
             call.reject("No se pudo iniciar el servicio de notificaciones", exception);
         }
@@ -68,8 +70,9 @@ public class SunmiPrinterPlugin extends Plugin {
         String body = call.getString("body", "Hay un pedido pendiente de aceptación");
         String orderId = call.getString("orderId", "");
         try {
-            PartnerNotificationService.notifyOrder(getContext(), title, body, orderId);
-            call.resolve();
+            JSObject result = new JSObject();
+            result.put("posted", PartnerNotificationService.notifyOrder(getContext(), title, body, orderId, "assigned", false));
+            call.resolve(result);
         } catch (Exception exception) {
             call.reject("No se pudo mostrar el aviso del pedido", exception);
         }

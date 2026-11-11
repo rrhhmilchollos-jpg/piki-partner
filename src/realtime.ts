@@ -140,12 +140,16 @@ export function connectPikiRealtime(input: {
               if (!data || (eventId && eventId === lastEventId)) continue;
               try {
                 const parsed = JSON.parse(data) as PikiRealtimeEvent;
+                if (controller.signal.aborted) break;
+                if (!parsed || typeof parsed.type !== "string" || !parsed.payload
+                    || typeof parsed.payload !== "object" || Array.isArray(parsed.payload)) continue;
                 if (eventId) {
                   lastEventId = eventId;
                   saveLastEventId(storageKey, eventId);
                 }
                 if (parsed.type) {
                   input.onEvent(parsed);
+                  if (controller.signal.aborted) break;
                   window.dispatchEvent(new CustomEvent("piki:realtime", { detail: parsed }));
                 }
               } catch { /* Malformed frames are ignored while the stream continues. */ }

@@ -15,6 +15,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override public void onCreate(@Nullable Bundle savedInstanceState) {
         registerPlugin(SunmiPrinterPlugin.class);
+        registerPlugin(PartnerNotificationsPlugin.class);
         super.onCreate(savedInstanceState);
         appUpdateManager = AppUpdateManagerFactory.create(this);
         checkForUpdate();

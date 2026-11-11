@@ -15,6 +15,9 @@ import { apiOrigin, displayRole, hasPermission, normalisePartnerProfile, partner
 import { visiblePartnerViews, type PartnerView } from "./partnerNavigation";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
 import { partnerSessionIssue, shouldClearPartnerSession } from "./sessionRecovery";
+import PartnerNativeNotificationControl from "./PartnerNativeNotificationControl";
+import { PartnerKitchenReceptionProvider } from "./PartnerKitchenReception";
+import { isPartnerNativeAndroid, partnerNativeNotifications } from "./partnerNativeNotifications";
 
 /* oxlint-disable react/set-state-in-effect -- effects reconcile authenticated profile and active location. */
 
@@ -131,11 +134,12 @@ function StoreHoursSettings({ token, location, enabled, onUnauthorized }: { toke
   return <><section className="hours-settings"><header><div><p className="section-kicker">CONFIGURACIÓN DEL LOCAL</p><h1>Horarios de apertura</h1><p>Configura una franja de mañana y otra de tarde-noche para cada día.</p></div><button type="button" className="support-trigger" disabled={!enabled || busy} onClick={() => void save()}>{busy ? "Guardando…" : "Guardar horarios"}</button></header><div className="hours-grid">{week.map((day) => { const value = hours[day]; return <div key={day} className="hours-row hours-row-split"><strong>{day}</strong><span className="hours-period-label">Mañana</span><input type="time" value={value.morning.open} disabled={value.closed || value.morning.closed || !enabled} onChange={(event) => updateWindow(day, "morning", { open: event.target.value })} /><span>—</span><input type="time" value={value.morning.close} disabled={value.closed || value.morning.closed || !enabled} onChange={(event) => updateWindow(day, "morning", { close: event.target.value })} /><span className="hours-period-label">Tarde-noche</span><input type="time" value={value.evening.open} disabled={value.closed || value.evening.closed || !enabled} onChange={(event) => updateWindow(day, "evening", { open: event.target.value })} /><span>—</span><input type="time" value={value.evening.close} disabled={value.closed || value.evening.closed || !enabled} onChange={(event) => updateWindow(day, "evening", { close: event.target.value })} /><label className="hours-closed"><input type="checkbox" checked={value.closed} disabled={!enabled} onChange={(event) => updateDay(day, { closed: event.target.checked })} /> Cerrado</label></div>; })}</div>{message && <p className="orders-message" role="status">{message}</p>}</section><GoogleBusinessSettings token={token} locationId={location.id} openingHours={hours} canEdit={enabled} onUnauthorized={onUnauthorized} onMessage={setMessage} /></>;
 }
 
-function MissingAssignment({ onLogout }: { onLogout: () => void }) {
+function MissingAssignment({ onLogout, detail }: { onLogout: () => void; detail?: string }) {
   return <main className="auth-page"><section className="orders-login-card">
     <p className="section-kicker">ACCESO PENDIENTE</p>
     <h2>No hay un local asignado</h2>
     <p>Tu sesión es válida, pero PIKI no ha recibido una asignación de establecimiento y permisos para este usuario. Contacta con tu administrador o soporte antes de operar pedidos.</p>
+    {detail && <p role="status">{detail}</p>}
     <button type="button" className="login-submit" onClick={onLogout}>Cerrar sesión</button>
   </section></main>;
 }
@@ -161,6 +165,7 @@ function PartnerOperationsApp() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const clearSession = useCallback(() => {
+    if (isPartnerNativeAndroid()) void partnerNativeNotifications.clearAllOrders().catch(() => undefined);
     localStorage.removeItem(tokenKey);
     sessionStorage.removeItem(tokenKey);
     setToken("");
@@ -179,35 +184,51 @@ function PartnerOperationsApp() {
   useEffect(() => {
     if (!token) { setCheckingSession(false); return; }
     let cancelled = false;
+    let validationSequence = 0;
+    let validationRequest: AbortController | null = null;
     const validate = async () => {
+      const sequence = ++validationSequence;
+      validationRequest?.abort();
+      const request = new AbortController();
+      validationRequest = request;
+      const timeout = window.setTimeout(() => request.abort(), 8_000);
       try {
-        const response = await fetch(`${apiOrigin}/api/v1/auth/employee/me`, { headers: partnerHeaders(token), cache: "no-store" });
+        const response = await fetch(`${apiOrigin}/api/v1/auth/employee/me`, { headers: partnerHeaders(token), cache: "no-store", signal: request.signal });
+        if (cancelled || sequence !== validationSequence) return;
         if (!response.ok) {
           if (!cancelled) {
             if (shouldClearPartnerSession(response.status)) clearSession();
-            else { setSessionIssue(partnerSessionIssue(response.status)); setCheckingSession(false); }
+            else {
+              if (response.status === 403) setProfile(null);
+              setSessionIssue(partnerSessionIssue(response.status)); setCheckingSession(false);
+            }
           }
           return;
         }
         const next = normalisePartnerProfile(await response.json());
-        if (!cancelled) {
+        if (!cancelled && sequence === validationSequence) {
           setProfile(next);
           setActiveLocationId((current) => next.locations.some((location) => location.id === current) ? current : next.locations[0]?.id || "");
           setCheckingSession(false);
           setSessionIssue("");
         }
       } catch {
-        if (!cancelled) { setSessionIssue(partnerSessionIssue()); setCheckingSession(false); }
+        if (!cancelled && sequence === validationSequence) { setSessionIssue(partnerSessionIssue()); setCheckingSession(false); }
+      } finally {
+        window.clearTimeout(timeout);
       }
     };
     void validate();
-    return () => { cancelled = true; };
+    const wake = () => { if (document.visibilityState === "visible") void validate(); };
+    document.addEventListener("visibilitychange", wake);
+    const timer = window.setInterval(wake, 60_000);
+    return () => { cancelled = true; validationRequest?.abort(); window.clearInterval(timer); document.removeEventListener("visibilitychange", wake); };
   }, [clearSession, token, sessionRetry]);
 
   if (checkingSession) return <main className="auth-page"><p>Comprobando acceso seguro a PIKI Partner Orders…</p></main>;
   if (token && !profile && sessionIssue) return <SessionRecovery message={sessionIssue} onRetry={retrySession} onLogout={clearSession} />;
   if (!token || !profile) return <main className="auth-page"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(nextToken) => { saveToken(nextToken); setToken(nextToken); setCheckingSession(true); window.dispatchEvent(new Event("piki-authenticated")); }} /></main>;
-  if (!profile.locations.length) return <MissingAssignment onLogout={clearSession} />;
+  if (!profile.locations.length) return <MissingAssignment onLogout={clearSession} detail={profile.accessIssue} />;
 
   const location = profile.locations.find((item) => item.id === activeLocationId) ?? profile.locations[0];
   const canStore = hasPermission(location, "store:write");
@@ -246,7 +267,9 @@ function PartnerOperationsApp() {
         <div className="location-select"><Store size={18} /><div><span>LOCAL ACTIVO</span>{profile.locations.length > 1 ? <label><select value={location.id} onChange={(event) => setActiveLocationId(event.target.value)} aria-label="Seleccionar local">{profile.locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={16} /></label> : <strong>{location.name}</strong>}</div></div>
         <div className="topbar-right"><StoreStatusControl token={token} location={location} enabled={canStore} onUnauthorized={clearSession} /><div className="profile-chip" aria-label={`Perfil ${profile.name} en ${location.name}`}><span>{location.name.slice(0, 1).toUpperCase()}</span><div><b>{location.name}</b><small>{profile.name} · {displayRole(role)}</small></div><button type="button" onClick={clearSession} aria-label="Cerrar sesión"><LogOut size={17} /></button></div></div>
       </header>
+      <PartnerKitchenReceptionProvider key={`${profile.tenant || "assigned"}:${location.id}:${canOrdersRead}`} token={token} locationId={location.id} canRead={canOrdersRead} onUnauthorized={clearSession}>
       <div className="orders-page">
+        {canOrdersRead && <PartnerNativeNotificationControl />}
         {!currentView && <div className="orders-loading">Este perfil no tiene permisos operativos para el local seleccionado. Contacta con el administrador de tu cuenta PIKI.</div>}
         {currentView === "orders" && <OrdersBoard token={token} locationId={location.id} canRead={canOrdersRead} canOperate={canOrdersOperate} canCancel={canCancel} pdaMode={isPdaMode} onUnauthorized={clearSession} />}
         {currentView === "history" && <ArchivedOrdersBoard token={token} locationId={location.id} canRead={canOrdersRead} onUnauthorized={clearSession} />}
@@ -255,6 +278,7 @@ function PartnerOperationsApp() {
         {currentView === "performance" && <PerformanceView token={token} locationId={location.id} canRead={canMetrics} onUnauthorized={clearSession} />}
         {currentView === "settings" && <><PartnerAccountSummary token={token} location={location} enabled={canStore} onUnauthorized={clearSession} onSaved={(patch) => setProfile((current) => current ? { ...current, locations: current.locations.map((item) => item.id === location.id ? { ...item, ...patch } : item) } : current)} /><StoreHoursSettings token={token} location={location} enabled={canStore} onUnauthorized={clearSession} /></>}
       </div>
+      </PartnerKitchenReceptionProvider>
     </main>
   </div>;
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { getStoredEmail, storeEmail } from "./authStorage";
 import { ArrowRight, Eye, EyeOff, KeyRound, LockKeyhole, ShieldCheck } from "lucide-react";
-import { getApiErrorMessage, getNetworkErrorMessage } from "./api";
+import { apiErrorMessage, getApiErrorMessage, getNetworkErrorMessage } from "./api";
 import { readPasswordRecoveryLink } from "./passwordRecoveryLink";
 
 type AuthMode = "login" | "change" | "request" | "reset";
@@ -111,7 +111,7 @@ export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: Props) 
           body: JSON.stringify({ identifier: email, password: current, role: "partner" }),
         });
         const data = await response.json().catch(() => ({})) as { accessToken?: string; requiresPasswordChange?: boolean };
-        if (!response.ok || !data.accessToken) throw new Error(await getApiErrorMessage(response, "No se ha podido iniciar sesión."));
+        if (!response.ok || !data.accessToken) throw new Error(apiErrorMessage(data, response.status, "No se ha podido iniciar sesión."));
         setToken(data.accessToken); if (email.includes("@")) storeEmail(email);
         if (data.requiresPasswordChange) setMode("change");
         else onAuthenticated(data.accessToken);
