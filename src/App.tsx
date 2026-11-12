@@ -45,15 +45,17 @@ function confirmedOpen(payload: unknown, fallback: boolean): boolean {
 }
 
 function StoreStatusControl({ token, location, enabled, onUnauthorized }: { token: string; location: PartnerLocation; enabled: boolean; onUnauthorized: () => void }) {
-  const [open, setOpen] = useState(location.isOpen ?? true);
+  const [open, setOpen] = useState(location.isOpen ?? false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const consultative = location.readOnly === true;
+  const ordersDisabled = consultative || location.ordersEnabled === false || location.availabilityStatus === "coming_soon";
   usePwaUpdateBlocker("partner-store-status", busy);
 
-  useEffect(() => { setOpen(location.isOpen ?? true); setMessage(""); }, [location.id, location.isOpen]);
+  useEffect(() => { setOpen(location.isOpen ?? false); setMessage(""); }, [location.id, location.isOpen]);
 
   const toggle = async () => {
-    if (!enabled || busy) return;
+    if (!enabled || consultative || busy) return;
     const next = !open;
     setBusy(true);
     setMessage("");
@@ -75,10 +77,10 @@ function StoreStatusControl({ token, location, enabled, onUnauthorized }: { toke
     } finally { setBusy(false); }
   };
 
-  return <div className={`store-control ${open ? "is-open" : "is-paused"}`}>
-    <button type="button" role="switch" aria-checked={open} disabled={!enabled || busy} onClick={() => void toggle()}>
+  return <div className={`store-control ${open && !ordersDisabled ? "is-open" : "is-paused"}`}>
+    <button type="button" role="switch" aria-checked={open && !ordersDisabled} disabled={!enabled || consultative || busy} onClick={() => void toggle()}>
       <span className="store-toggle"><span /></span>
-      <span><b>{open ? "ABIERTO" : "PAUSADO"}</b><small>{busy ? "Confirmando…" : open ? "Aceptando pedidos" : "No se reciben pedidos"}</small></span>
+      <span><b>{consultative ? "SOLO CONSULTA" : open ? "ABIERTO" : "PAUSADO"}</b><small>{busy ? "Confirmando…" : ordersDisabled ? "No operativo · sin pedidos" : open ? "Aceptando pedidos" : location.isOpen === undefined ? "Estado sin confirmar" : "No se reciben pedidos"}</small></span>
     </button>
     {message && <p role="status">{message}</p>}
   </div>;
@@ -285,6 +287,7 @@ function PartnerOperationsApp() {
       <PartnerKitchenReceptionProvider key={`${profile.tenant || "assigned"}:${location.id}:${canOrdersRead}`} token={token} locationId={location.id} canRead={canOrdersRead} onUnauthorized={clearSession}>
       <div className="orders-page">
         {canOrdersRead && <PartnerNativeNotificationControl />}
+        {location.readOnly && <div className="orders-loading" role="status">Local en consulta, no operativo. La aprobación comercial, disponibilidad y carta deben estar confirmadas antes de recibir pedidos.</div>}
         {!currentView && <div className="orders-loading">Este perfil no tiene permisos operativos para el local seleccionado. Contacta con el administrador de tu cuenta PIKI.</div>}
         {currentView === "orders" && <OrdersBoard token={token} locationId={location.id} canRead={canOrdersRead} canAccept={canAccept} canPrepare={canPrepare} canCancel={canCancel} pdaMode={isPdaMode} onUnauthorized={clearSession} />}
         {currentView === "history" && <ArchivedOrdersBoard token={token} locationId={location.id} canRead={canOrdersRead} onUnauthorized={clearSession} />}
