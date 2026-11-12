@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Archive, BarChart3, Bell, BookOpen, ChevronDown, CircleHelp, Clock3, LogOut, Menu, PackageSearch, Phone, Store, X } from "lucide-react";
 import "./App.css";
+import "./partnerSafety.css";
 import CookieConsent from "./components/CookieConsent";
 import EmployeeAuthGate from "./EmployeeAuthGate";
 import MenuEditor from "./MenuEditor";
@@ -156,6 +157,8 @@ function SessionRecovery({ message, onRetry, onLogout }: { message: string; onRe
 
 function PartnerOperationsApp() {
   const [token, setToken] = useState(storedToken);
+  const [sessionEpoch, setSessionEpoch] = useState(0);
+  const currentSession = useRef({ token, epoch: 0 });
   const [profile, setProfile] = useState<PartnerProfile | null>(null);
   const [activeLocationId, setActiveLocationId] = useState("");
   const [checkingSession, setCheckingSession] = useState(Boolean(token));
@@ -164,7 +167,13 @@ function PartnerOperationsApp() {
   const [activeView, setActiveView] = useState<View>("orders");
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const isCurrentSession = useCallback(() => currentSession.current.token === token && currentSession.current.epoch === sessionEpoch, [token, sessionEpoch]);
   const clearSession = useCallback(() => {
+    if (!isCurrentSession()) return;
+    // Invalidate synchronously, before React rerenders or another login can reuse the token.
+    const epoch = currentSession.current.epoch + 1;
+    currentSession.current = { token: "", epoch };
+    setSessionEpoch(epoch);
     if (isPartnerNativeAndroid()) void partnerNativeNotifications.clearAllOrders().catch(() => undefined);
     localStorage.removeItem(tokenKey);
     sessionStorage.removeItem(tokenKey);
@@ -173,7 +182,7 @@ function PartnerOperationsApp() {
     setActiveLocationId("");
     setCheckingSession(false);
     setSessionIssue("");
-  }, []);
+  }, [isCurrentSession]);
 
   const retrySession = () => {
     setSessionIssue("");
@@ -194,7 +203,7 @@ function PartnerOperationsApp() {
       const timeout = window.setTimeout(() => request.abort(), 8_000);
       try {
         const response = await fetch(`${apiOrigin}/api/v1/auth/employee/me`, { headers: partnerHeaders(token), cache: "no-store", signal: request.signal });
-        if (cancelled || sequence !== validationSequence) return;
+        if (cancelled || request.signal.aborted || sequence !== validationSequence || !isCurrentSession()) return;
         if (!response.ok) {
           if (!cancelled) {
             if (shouldClearPartnerSession(response.status)) clearSession();
@@ -206,14 +215,14 @@ function PartnerOperationsApp() {
           return;
         }
         const next = normalisePartnerProfile(await response.json());
-        if (!cancelled && sequence === validationSequence) {
+        if (!cancelled && !request.signal.aborted && sequence === validationSequence && isCurrentSession()) {
           setProfile(next);
           setActiveLocationId((current) => next.locations.some((location) => location.id === current) ? current : next.locations[0]?.id || "");
           setCheckingSession(false);
           setSessionIssue("");
         }
       } catch {
-        if (!cancelled && sequence === validationSequence) { setSessionIssue(partnerSessionIssue()); setCheckingSession(false); }
+        if (!cancelled && sequence === validationSequence && isCurrentSession()) { setSessionIssue(partnerSessionIssue()); setCheckingSession(false); }
       } finally {
         window.clearTimeout(timeout);
       }
@@ -223,17 +232,23 @@ function PartnerOperationsApp() {
     document.addEventListener("visibilitychange", wake);
     const timer = window.setInterval(wake, 60_000);
     return () => { cancelled = true; validationRequest?.abort(); window.clearInterval(timer); document.removeEventListener("visibilitychange", wake); };
-  }, [clearSession, token, sessionRetry]);
+  }, [clearSession, isCurrentSession, token, sessionRetry]);
 
   if (checkingSession) return <main className="auth-page"><p>Comprobando acceso seguro a PIKI Partner Orders…</p></main>;
   if (token && !profile && sessionIssue) return <SessionRecovery message={sessionIssue} onRetry={retrySession} onLogout={clearSession} />;
-  if (!token || !profile) return <main className="auth-page"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(nextToken) => { saveToken(nextToken); setToken(nextToken); setCheckingSession(true); window.dispatchEvent(new Event("piki-authenticated")); }} /></main>;
+  if (!token || !profile) return <main className="auth-page"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(nextToken) => {
+    const epoch = currentSession.current.epoch + 1;
+    currentSession.current = { token: nextToken, epoch };
+    setSessionEpoch(epoch);
+    saveToken(nextToken); setToken(nextToken); setCheckingSession(true); window.dispatchEvent(new Event("piki-authenticated"));
+  }} /></main>;
   if (!profile.locations.length) return <MissingAssignment onLogout={clearSession} detail={profile.accessIssue} />;
 
   const location = profile.locations.find((item) => item.id === activeLocationId) ?? profile.locations[0];
   const canStore = hasPermission(location, "store:write");
   const canOrdersRead = hasPermission(location, "orders:read");
-  const canOrdersOperate = hasPermission(location, "orders:write") || hasPermission(location, "orders:prepare");
+  const canAccept = hasPermission(location, "orders:write");
+  const canPrepare = hasPermission(location, "orders:prepare");
   const canCancel = hasPermission(location, "orders:cancel");
   const canMenuRead = hasPermission(location, "menu:read");
   const canMenu = hasPermission(location, "menu:write");
@@ -271,10 +286,10 @@ function PartnerOperationsApp() {
       <div className="orders-page">
         {canOrdersRead && <PartnerNativeNotificationControl />}
         {!currentView && <div className="orders-loading">Este perfil no tiene permisos operativos para el local seleccionado. Contacta con el administrador de tu cuenta PIKI.</div>}
-        {currentView === "orders" && <OrdersBoard token={token} locationId={location.id} canRead={canOrdersRead} canOperate={canOrdersOperate} canCancel={canCancel} pdaMode={isPdaMode} onUnauthorized={clearSession} />}
+        {currentView === "orders" && <OrdersBoard token={token} locationId={location.id} canRead={canOrdersRead} canAccept={canAccept} canPrepare={canPrepare} canCancel={canCancel} pdaMode={isPdaMode} onUnauthorized={clearSession} />}
         {currentView === "history" && <ArchivedOrdersBoard token={token} locationId={location.id} canRead={canOrdersRead} onUnauthorized={clearSession} />}
-        {currentView === "catalog" && canMenu && <MenuEditor key={location.id} apiOrigin={apiOrigin} token={token} locationId={location.id} onUnauthorized={clearSession} />}
-        {currentView === "menu" && <MenuAvailability token={token} locationId={location.id} canRead={canMenuRead} canEdit={canMenu} onUnauthorized={clearSession} />}
+        {currentView === "catalog" && canMenu && <MenuEditor key={location.id} apiOrigin={apiOrigin} token={token} locationId={location.id} identityKey={`${profile.tenant || ""}:${profile.email}:${location.tenant || ""}`} onUnauthorized={clearSession} />}
+        {currentView === "menu" && <MenuAvailability key={location.id} token={token} locationId={location.id} identityKey={`${profile.tenant || ""}:${profile.email}:${location.tenant || ""}`} canRead={canMenuRead} canEdit={canMenu} onUnauthorized={clearSession} />}
         {currentView === "performance" && <PerformanceView token={token} locationId={location.id} canRead={canMetrics} onUnauthorized={clearSession} />}
         {currentView === "settings" && <><PartnerAccountSummary token={token} location={location} enabled={canStore} onUnauthorized={clearSession} onSaved={(patch) => setProfile((current) => current ? { ...current, locations: current.locations.map((item) => item.id === location.id ? { ...item, ...patch } : item) } : current)} /><StoreHoursSettings token={token} location={location} enabled={canStore} onUnauthorized={clearSession} /></>}
       </div>

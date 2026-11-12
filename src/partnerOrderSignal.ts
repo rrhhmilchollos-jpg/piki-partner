@@ -8,7 +8,7 @@ export type PartnerKitchenOrder = {
 };
 export type PartnerOrderSignal = { kind: "new_order" | "cancelled"; orderId: string; publicCode?: string };
 export const isPendingKitchenOrder = (order: PartnerKitchenOrder) => order.status === "pending"
-  && (order.paymentState === "paid" || order.paymentMethod === "cash" || order.cashDueAtDelivery === true);
+  && (order.paymentState === "authorized" || order.paymentState === "paid" || order.paymentMethod === "cash" || order.cashDueAtDelivery === true);
 
 /** Instance-local state: remount when changing account/restaurant. Never infer cancellation from disappearance. */
 export function createPartnerOrderSignals() {

@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { escPosTicket } from "./sunmiPrinter";
 
 describe("Sunmi ESC/POS ticket", () => {
+  it("keeps explicit order notes in the native ticket", () => {
+    const ticket = escPosTicket({ _id: "fixture", createdAt: "2026-11-11T12:00:00Z", status: "accepted", deliveryNote: "Sin sal\nSalsa aparte" });
+    expect(ticket).toContain("NOTAS: Sin sal\nSalsa aparte");
+  });
   it("includes the public order id, items and modifiers", () => {
     const ticket = escPosTicket({
       _id: "order-1",

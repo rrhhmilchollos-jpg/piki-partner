@@ -258,7 +258,6 @@ export function hasPermission(location: PartnerLocation | null | undefined, perm
   if (!location) return false;
   if (location.permissions.includes("*")) return true;
   if (location.permissions.includes(permission)) return true;
-  if (permission === "orders:prepare") return location.permissions.includes("orders:write");
   if (permission === "menu:read") return location.permissions.includes("menu:write");
   return false;
 }
