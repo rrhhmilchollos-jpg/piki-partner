@@ -29,3 +29,13 @@
 - [x] Acotar clearSession en App al token/epoch vigente, invalidado sincrónicamente en logout/login; un 401 tardío A tras login B o relogin con el mismo token no cierra la sesión nueva. Conservar logout de 401 vigente.
 - [x] Conservar required y mínimos/máximos contractuales originales al pausar/reactivar o sanear opciones, sin clamp al número disponible ni cotización/estimación local alternativa.
 - [x] Verificar handlers A→logout→loginB→401 tardío A, GET/JSON y save/stock obsoletos, escritura/borrador B activos, límites al pausar/reactivar y la integración de menú existente con guard/mocks offline. Resultado focalizado: 104 tests en 6 archivos; pnpm check, lint de afectados (0 warnings/errors) y diff check aprobados. No suite integral/E2E, build de release, commits/push/deploy, API/DB/servicios ni operaciones comerciales. Informe: /home/ubuntu/piki-audit/piki-partner-integration-fixes.md.
+
+## Alta pública Partner · 12/11/2026
+- [x] Aceptar 0–5 documentos opcionales, enviando solo los elegidos y omitiendo documents si no hay ninguno. PDF/JPEG/PNG, tipos únicos y máximo 2.500.000 bytes; validar localmente y conservar controles/escáner del API, sin aprobación ficticia por ausencia.
+- [x] Exponer PDA a 200 €/unidad (20000 céntimos), cantidad entera 1–50, total y consentimiento propio explícito renovado tras cambios; rechazar el precio anterior 30000 sin tocar cargos/históricos.
+- [x] Exponer IVA 4/10/21 sin selección oculta, conservar contraseña válida, perfil, datos legales/fiscales/bancarios y aceptaciones requeridas.
+- [x] Mostrar dos franjas editables por día (lunes–domingo), cierres independientes de franja/día, etiquetas accesibles, HH:MM/00:00/nocturnos Europe/Madrid; ningún horario activo inicial, y exigir al menos una franja configurada para enviar.
+- [x] Confirmar recepción solo con id/código real y pending_review del API; no éxito por HTML/2xx vacío, código PIKI-PARTNER de fallback, aprobación ni enlace Stripe inventados. No inventar contrato legal externo ausente.
+- [x] Ejecutar check-only previo/final, regresiones offline de handlers/payload/adjuntos/coste/horarios/recibo y build sin .env ni servidor. Entregar manifiesto relativo y handoff a Root; sin commits/push/merge/deploy.
+
+Evidencia final: 273/273 tests Vitest (59 nuevos de onboarding), check-only previo/final, lint de afectados y build offline sin errores. Handoff y manifiesto: `/home/ubuntu/piki-audit/noon-partner-onboarding-fix.md`, `/home/ubuntu/piki-audit/noon-partner-onboarding-files.txt`. La fuente legal externa no está en este repositorio: Root debe confirmar los textos publicados; no se inventaron enlaces ni condiciones.
