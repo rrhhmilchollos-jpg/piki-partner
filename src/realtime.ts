@@ -26,6 +26,10 @@ export function isPikiRealtimeUnauthorized(status: number): boolean {
   return status === 401;
 }
 
+export function isPikiRealtimeContentType(value: string | null): boolean {
+  return value?.split(";", 1)[0].trim().toLowerCase() === "text/event-stream";
+}
+
 function readLastEventId(storageKey: string): string {
   try { return sessionStorage.getItem(storageKey) || ""; } catch { return ""; }
 }
@@ -117,6 +121,7 @@ export function connectPikiRealtime(input: {
           break;
         }
         if (!response.ok || !response.body) throw new Error(`SSE_HTTP_${response.status}`);
+        if (!isPikiRealtimeContentType(response.headers.get("content-type"))) throw new Error("SSE_INVALID_CONTENT_TYPE");
 
         attempt = 0;
         emitState({ status: "connected", attempt: 0 });
