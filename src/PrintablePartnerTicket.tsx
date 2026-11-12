@@ -12,9 +12,11 @@ export type PrintablePartnerOrder = {
   createdAt: string;
   status: string;
   deliveryAddress?: string;
+  deliveryNote?: string;
   items?: PrintableItem[];
   totalCents?: number;
   paymentMethod?: string;
+  paymentState?: string;
   cashDueAtDelivery?: boolean;
   restaurant?: { name?: string; address?: string; phone?: string } | null;
   customer?: { name?: string } | null;
@@ -49,6 +51,7 @@ export default function PrintablePartnerTicket({ order }: { order: PrintablePart
     <p className="thermal-status">{statusLabels[order.status] || order.status}</p>
     <p className="thermal-line"><span>Cliente</span><b>{order.customer?.name || "Cliente PIKI"}</b></p>
     <p className="thermal-line"><span>Dirección</span><b>{order.deliveryAddress || "—"}</b></p>
+    {order.deliveryNote?.trim() && <p className="thermal-note"><strong>NOTA DEL PEDIDO</strong><br />{order.deliveryNote.trim()}</p>}
     <div className="thermal-rule" />
     <ul>
       {(order.items || []).map((item, index) => {
@@ -63,7 +66,7 @@ export default function PrintablePartnerTicket({ order }: { order: PrintablePart
       })}
     </ul>
     <div className="thermal-rule" />
-    <p className="thermal-line"><span>Pago</span><b>{isCashOrder(order) ? "EFECTIVO · cobra Rider" : "PAGADO ONLINE"}</b></p>
+    <p className="thermal-line"><span>Pago</span><b>{isCashOrder(order) ? "EFECTIVO · cobra Rider" : order.paymentState === "authorized" ? "ONLINE · AUTORIZADO" : order.paymentState === "paid" ? "PAGADO ONLINE" : "PAGO ONLINE"}</b></p>
     <p className="thermal-line"><span>Total</span><b>{(Number(order.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}</b></p>
     <footer>Gracias por colaborar con PIKI<br />partners.pikidelivery.com</footer>
   </div>;

@@ -1,0 +1,5 @@
+/* Reuse the existing PIKI alert; retain line breaks in kitchen notes and 58 mm fallback. */
+.order-special-note { margin: 10px 0; }
+.order-special-note span { min-width: 0; }
+.order-special-note small, .sunmi-special-alert small, .thermal-note { white-space: pre-wrap; overflow-wrap: anywhere; }
+.thermal-note { padding: 6px 0; border-top: 1px dashed currentColor; border-bottom: 1px dashed currentColor; }

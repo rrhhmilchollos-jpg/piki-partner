@@ -13,6 +13,7 @@ const ReceptionContext = createContext<({
   realtimeState: PikiRealtimeConnectionState;
   now: number;
   load: () => Promise<void>;
+  applyConfirmedOrder: (order: PartnerOrder) => void;
 } & ReturnType<typeof usePartnerOrderAlarm>) | null>(null);
 
 /* oxlint-disable react/set-state-in-effect -- reconciles authenticated kitchen events. */
@@ -102,7 +103,11 @@ export function PartnerKitchenReceptionProvider({ token, locationId, canRead, on
       },
     });
   }, [canRead, load, locationId, notifyCancelledOrder, notifyPaidOrder, onUnauthorized, resolveOrder, token]);
-  return <ReceptionContext.Provider value={{ ...alarm, orders, loading, receptionMessage, realtimeState, now, load }}>{children}</ReceptionContext.Provider>;
+  const applyConfirmedOrder = useCallback((order: PartnerOrder) => {
+    eventVersion.current += 1;
+    setOrders((current) => current.map((existing) => existing._id === order._id ? { ...existing, ...order } : existing));
+  }, []);
+  return <ReceptionContext.Provider value={{ ...alarm, orders, loading, receptionMessage, realtimeState, now, load, applyConfirmedOrder }}>{children}</ReceptionContext.Provider>;
 }
 
 // oxlint-disable-next-line react/only-export-components

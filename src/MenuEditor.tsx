@@ -1,5 +1,6 @@
 /* oxlint-disable react/preserve-manual-memoization -- headers/load are intentionally stable for API effects. */
-import { useCallback, useEffect, useMemo, useState } from "react";
+/* oxlint-disable react/set-state-in-effect -- effects reset identity-scoped drafts and synchronise the remote menu. */
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   Copy,
@@ -20,6 +21,9 @@ import { partnerHeaders } from "./partnerApi";
 import { bytesToBase64, MENU_IMAGE_ACCEPT, prepareMenuImage, sha256File, validateMenuFile, MAX_MENU_IMAGE_BYTES } from "./menuAsset";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
 import { connectCatalogRealtime } from "./catalogRealtime";
+import { menuWriteBody, patchPartnerMenuAvailability, PartnerMenuRequestError, readMenuSnapshot } from "./partnerMenuContract";
+import type { MenuResponse, MenuSnapshot } from "./partnerMenuContract";
+import { usePartnerMenuRequests } from "./usePartnerMenuRequests";
 
 import {
   allergenSummary, normalizeItem, prepareMenuJsonImport, safePrice,
@@ -27,6 +31,7 @@ import {
 } from "./menuImport";
 import type { Item, Modifier, ModifierOption } from "./menuImport";
 
+const emptyItems: Item[] = [];
 type MenuAsset = {
   id: string;
   fileName: string;
@@ -103,15 +108,20 @@ export default function MenuEditor({
   apiOrigin,
   token,
   locationId,
+  identityKey = "",
   onUnauthorized,
 }: {
   apiOrigin: string;
   token: string;
   locationId: string;
+  identityKey?: string;
   onUnauthorized: () => void;
 }) {
-  const [items, setItems] = useState<Item[]>([]);
+  const [snapshot, setSnapshot] = useState<MenuSnapshot<Item> | null>(null);
+  const items = snapshot?.items ?? emptyItems;
+  const [menuNeedsReload, setMenuNeedsReload] = useState(true);
   const [draft, setDraft] = useState<Item | null>(null);
+  const [draftRevision, setDraftRevision] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -122,19 +132,35 @@ export default function MenuEditor({
   const [importing, setImporting] = useState(false);
   const [internalDemo, setInternalDemo] = useState(false);
   const [filter, setFilter] = useState("Todos");
+  const operationLock = useRef(false);
+  const requestVersion = useRef(0);
+  const assetsVersion = useRef(0);
+  const staleDraft = Boolean(draft) && draftRevision !== snapshot?.menuRevision;
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
+  const beginRequest = usePartnerMenuRequests(token, locationId, apiOrigin, onUnauthorized, identityKey);
   usePwaUpdateBlocker("partner-menu-editor", Boolean(draft) || saving || uploading);
+  const openDraft = (item: Item) => {
+    if (operationLock.current || loading || menuNeedsReload || !snapshot) return;
+    setDraft(item);
+    setDraftRevision(snapshot.menuRevision);
+  };
   const uploadAsset = async (file: File, kind: "menu_image" | "menu_file") => {
+    const request = beginRequest();
+    if (!request.current()) { request.finish(); return; }
     setUploading(true);
     setMessage(kind === "menu_file" ? "Comprobando y analizando el PDF…" : "Optimizando y analizando la imagen…");
     try {
       const preparedFile = kind === "menu_image" ? await prepareMenuImage(file) : file;
+      if (!request.current()) return;
       if (kind === "menu_file") validateMenuFile(preparedFile);
       const bytes = new Uint8Array(await preparedFile.arrayBuffer());
+      if (!request.current()) return;
       const contentBase64 = bytesToBase64(bytes);
       const sha256 = await sha256File(preparedFile);
+      if (!request.current()) return;
       const response = await fetch(`${apiOrigin}/api/v1/partners/menu/assets`, {
         method: "POST",
+        signal: request.signal,
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
           fileName: kind === "menu_image" ? uniqueImageName(preparedFile.name, sha256) : preparedFile.name,
@@ -145,7 +171,9 @@ export default function MenuEditor({
           kind,
         }),
       });
+      if (!request.current()) return;
       const body = await response.json().catch(() => ({})) as { error?: string; message?: string; asset?: MenuAsset & { folderKey?: string } };
+      if (!request.current()) return;
       if (response.status === 401) { onUnauthorized(); return; }
       if (response.status === 403) { setMessage("Este perfil no tiene permiso para subir archivos a la carta del local activo."); return; }
       if (!response.ok) {
@@ -170,9 +198,10 @@ export default function MenuEditor({
         setMessage(`PDF de carta subido (${Math.ceil(preparedFile.size / 1024)} KB). Analizado por ClamAV.`);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo subir el archivo.");
+      if (request.current()) setMessage(error instanceof Error ? error.message : "No se pudo subir el archivo.");
     } finally {
-      setUploading(false);
+      if (request.current()) setUploading(false);
+      request.finish();
     }
   };
   const categories = useMemo(
@@ -187,35 +216,48 @@ export default function MenuEditor({
       ? items
       : items.filter((item) => item.category === filter);
   const loadAssets = useCallback(async () => {
+    const request = beginRequest();
+    if (!request.current()) { request.finish(); return; }
+    const version = ++assetsVersion.current;
+    const current = () => request.current() && version === assetsVersion.current;
     setAssetsLoading(true);
     try {
-      const response = await fetch(`${apiOrigin}/api/v1/partners/menu/assets`, { headers, cache: "no-store" });
+      const response = await fetch(`${apiOrigin}/api/v1/partners/menu/assets`, { headers, cache: "no-store", signal: request.signal });
+      if (!current()) return;
       if (response.status === 401) { onUnauthorized(); return; }
       if (!response.ok) throw new Error(`No se pudieron cargar los archivos (HTTP ${response.status}).`);
-      setAssets(((await response.json()) as { assets?: MenuAsset[] }).assets || []);
+      const body = await response.json() as { assets?: MenuAsset[] };
+      if (!current()) return;
+      setAssets(body.assets || []);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudieron cargar los archivos de carta.");
+      if (current()) setMessage(error instanceof Error ? error.message : "No se pudieron cargar los archivos de carta.");
     } finally {
-      setAssetsLoading(false);
+      if (current()) setAssetsLoading(false);
+      request.finish();
     }
-  }, [apiOrigin, headers, onUnauthorized]);
+  }, [apiOrigin, beginRequest, headers, onUnauthorized]);
   const startImport = async (asset: MenuAsset) => {
+    const request = beginRequest();
+    if (!request.current()) { request.finish(); return; }
     setImporting(true);
     setMessage(`Extrayendo productos de «${asset.fileName}»…`);
     try {
       const response = await fetch(`${apiOrigin}/api/v1/partners/menu/imports`, {
         method: "POST",
+        signal: request.signal,
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({ assetId: asset.id }),
       });
+      if (!request.current()) return;
       const body = await response.json().catch(() => ({})) as { draft?: ImportDraft; message?: string; error?: string };
+      if (!request.current()) return;
       if (response.status === 401) { onUnauthorized(); return; }
       if (!response.ok || !body.draft) throw new Error(body.message || body.error || "No se pudo analizar la carta.");
       setImportDraft(body.draft);
       setMessage(`Borrador creado: ${body.draft.items.length} productos detectados. Revisa y publica cuando todo sea correcto.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo analizar la carta.");
-    } finally { setImporting(false); }
+      if (request.current()) setMessage(error instanceof Error ? error.message : "No se pudo analizar la carta.");
+    } finally { if (request.current()) setImporting(false); request.finish(); }
   };
   const updateImportedItem = (id: string, patch: Partial<Item>) => {
     setImportDraft((current) => current ? { ...current, items: current.items.map((item) => item.id === id ? { ...item, ...patch } : item) } : current);
@@ -225,49 +267,75 @@ export default function MenuEditor({
   };
   const publishImport = async () => {
     if (!importDraft || !importDraft.items.length) return setMessage("Añade al menos un producto antes de publicar.");
+    const request = beginRequest();
+    if (!request.current()) { request.finish(); return; }
     setImporting(true);
     try {
       const update = await fetch(`${apiOrigin}/api/v1/partners/menu/imports/${encodeURIComponent(importDraft.id)}`, {
-        method: "PUT", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ items: importDraft.items }),
+        method: "PUT", signal: request.signal, headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ items: importDraft.items }),
       });
+      if (!request.current()) return;
       const updatedBody = await update.json().catch(() => ({})) as { draft?: ImportDraft; error?: string };
+      if (!request.current()) return;
       if (update.status === 401) { onUnauthorized(); return; }
       if (!update.ok || !updatedBody.draft) throw new Error(updatedBody.error || "No se pudo guardar el borrador.");
-      const publish = await fetch(`${apiOrigin}/api/v1/partners/menu/imports/${encodeURIComponent(importDraft.id)}/publish`, { method: "POST", headers });
+      const publish = await fetch(`${apiOrigin}/api/v1/partners/menu/imports/${encodeURIComponent(importDraft.id)}/publish`, { method: "POST", headers, signal: request.signal });
+      if (!request.current()) return;
       const publishBody = await publish.json().catch(() => ({})) as { draft?: ImportDraft; error?: string };
+      if (!request.current()) return;
+      if (publish.status === 401) { onUnauthorized(); return; }
       if (!publish.ok) throw new Error(publishBody.error || "No se pudo publicar la carta.");
       setImportDraft(null);
       await load();
+      if (!request.current()) return;
       setMessage("Carta importada y publicada correctamente. Los productos ya están disponibles según su estado.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo publicar la carta.");
-    } finally { setImporting(false); }
+      if (request.current()) setMessage(error instanceof Error ? error.message : "No se pudo publicar la carta.");
+    } finally { if (request.current()) setImporting(false); request.finish(); }
   };
-  const load = useCallback(async () => {
+  const load = useCallback(async (afterWrite = false) => {
+    if (operationLock.current && !afterWrite) return;
+    const request = beginRequest();
+    if (!request.current()) { request.finish(); return; }
+    const version = ++requestVersion.current;
+    const current = () => request.current() && version === requestVersion.current;
     setLoading(true);
+    setMenuNeedsReload(true);
     try {
       const response = await fetch(`${apiOrigin}/api/v1/partners/menu`, {
         headers,
         cache: "no-store",
+        signal: request.signal,
       });
+      if (!current()) return;
       if (response.status === 401) { onUnauthorized(); return; }
-      if (response.status === 403) { setItems([]); throw new Error("Este perfil no tiene permiso para consultar la carta del local activo."); }
+      if (response.status === 403) { setSnapshot(null); throw new Error("Este perfil no tiene permiso para consultar la carta del local activo."); }
       if (!response.ok) throw new Error(`No se pudo cargar la carta (HTTP ${response.status}).`);
-      const body = (await response.json()) as { menu?: Item[]; restaurant?: { internalDemo?: boolean } };
-      setItems((body.menu || []).map(normalizeItem));
+      const body = (await response.json()) as MenuResponse<Item>;
+      if (!current()) return;
+      const next = readMenuSnapshot(body);
+      setSnapshot({ ...next, items: next.items.map(normalizeItem) });
+      setMenuNeedsReload(false);
       setInternalDemo(Boolean(body.restaurant?.internalDemo));
       await loadAssets();
+      if (!current()) return;
     } catch (error) {
-      setMessage(
+      if (current()) setMessage(
         error instanceof Error ? error.message : "No se pudo cargar la carta.",
       );
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
+      request.finish();
     }
-  }, [apiOrigin, headers, loadAssets, onUnauthorized]);
+  }, [apiOrigin, beginRequest, headers, loadAssets, onUnauthorized]);
   useEffect(() => {
+    operationLock.current = false;
+    // A changed identity cannot inherit either the server snapshot or an in-memory draft.
+    setSnapshot(null); setDraft(null); setDraftRevision(null); setAssets([]); setImportDraft(null);
+    setMessage(""); setSaving(false); setUploading(false); setImporting(false); setInternalDemo(false);
     // oxlint-disable-next-line react/set-state-in-effect
     void load();
+    return () => { requestVersion.current += 1; assetsVersion.current += 1; };
   }, [load]);
   useEffect(() => {
     const refresh = window.setInterval(() => {
@@ -282,54 +350,88 @@ export default function MenuEditor({
     });
   }, [apiOrigin, draft, importing, load, locationId, saving, token, uploading]);
   const persistMenu = async (next: Item[], successMessage: string): Promise<boolean> => {
+    if (operationLock.current || loading || uploading) return false;
+    if (!snapshot || menuNeedsReload || staleDraft) {
+      setMessage("Actualiza y revisa la carta antes de guardar. Tu borrador se conserva; no se sobrescribe la versión actual.");
+      return false;
+    }
+    const request = beginRequest();
+    if (!request.current()) { request.finish(); return false; }
+    operationLock.current = true;
+    requestVersion.current += 1;
     setSaving(true);
+    setMenuNeedsReload(true);
     try {
       const response = await fetch(`${apiOrigin}/api/v1/partners/menu`, {
         method: "PUT",
         headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ items: next }),
+        body: JSON.stringify(menuWriteBody(snapshot, next)),
+        signal: request.signal,
       });
+      if (!request.current()) return false;
       if (response.status === 401) { onUnauthorized(); return false; }
       if (response.status === 403) { setMessage("Este perfil no tiene permiso para modificar la carta del local activo."); return false; }
-      const body = await response.json().catch(() => ({})) as { error?: string; menu?: Item[] };
+      const body = await response.json().catch(() => ({})) as MenuResponse<Item> & { error?: string };
+      if (!request.current()) return false;
+      if (response.status === 409 && body.error === "MENU_REVISION_CONFLICT") {
+        await load(true);
+        if (!request.current()) return false;
+        setMessage("La carta cambió en otro dispositivo. Se ha solicitado la versión actual y tu borrador se conserva. Revisa los cambios antes de guardar; no se ha reintentado el guardado.");
+        return false;
+      }
       if (!response.ok) throw new Error(body.error || `No se pudo guardar la carta (HTTP ${response.status}).`);
-      setItems(Array.isArray(body.menu) ? body.menu.map(normalizeItem) : next);
+      const saved = readMenuSnapshot(body);
+      setSnapshot({ ...saved, items: saved.items.map(normalizeItem) });
+      setMenuNeedsReload(false);
       setMessage(successMessage);
       return true;
     } catch (error) {
+      if (!request.current()) return false;
+      await load(true);
+      if (!request.current()) return false;
       setMessage(error instanceof Error ? error.message : "No se pudo guardar la carta.");
       return false;
     } finally {
-      setSaving(false);
+      if (request.current()) { operationLock.current = false; setSaving(false); }
+      request.finish();
     }
   };
   const removeAsset = async (asset: MenuAsset) => {
     if (!window.confirm(`¿Eliminar «${asset.fileName}» de los archivos de carta?`)) return;
+    const request = beginRequest();
+    if (!request.current()) { request.finish(); return; }
     try {
-      const response = await fetch(`${apiOrigin}/api/v1/partners/menu/assets/${encodeURIComponent(asset.id)}`, { method: "DELETE", headers });
+      const response = await fetch(`${apiOrigin}/api/v1/partners/menu/assets/${encodeURIComponent(asset.id)}`, { method: "DELETE", headers, signal: request.signal });
+      if (!request.current()) return;
       if (response.status === 401) { onUnauthorized(); return; }
       const body = await response.json().catch(() => ({})) as { error?: string; message?: string };
+      if (!request.current()) return;
       if (!response.ok) throw new Error(body.message || body.error || `No se pudo eliminar el archivo (HTTP ${response.status}).`);
       setAssets((current) => current.filter((entry) => entry.id !== asset.id));
       setMessage("Archivo eliminado correctamente.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo eliminar el archivo.");
-    }
+      if (request.current()) setMessage(error instanceof Error ? error.message : "No se pudo eliminar el archivo.");
+    } finally { request.finish(); }
   };
   const importMenuJson = async (file: File) => {
     if (loading || saving || uploading || importing) return;
+    const request = beginRequest();
+    if (!request.current()) { request.finish(); return; }
     setImporting(true);
     try {
       if (file.size > 1_000_000) throw new Error("El archivo es demasiado grande (máximo 1 MB).");
       const parsed = JSON.parse(await file.text()) as unknown;
+      if (!request.current()) return;
       const result = prepareMenuJsonImport(items, parsed);
       if (!result.added && !result.updated) return setMessage("Los IDs del archivo ya están en la carta sin cambios.");
       if (!window.confirm(`Se añadirán ${result.added} productos y se actualizarán ${result.updated} por ID en la carta del local activo. Los productos fuera del lote se conservarán sin cambios. ¿Continuar?`)) return;
       await persistMenu(result.items, `${result.added} productos añadidos y ${result.updated} actualizados por ID. Revisa extras, alérgenos y fotos antes de dar por buena la carta.`);
+      if (!request.current()) return;
     } catch (error) {
-      setMessage(error instanceof SyntaxError ? "El archivo no es un JSON válido." : error instanceof Error ? error.message : "No se pudo importar el archivo.");
+      if (request.current()) setMessage(error instanceof SyntaxError ? "El archivo no es un JSON válido." : error instanceof Error ? error.message : "No se pudo importar el archivo.");
     } finally {
-      setImporting(false);
+      if (request.current()) setImporting(false);
+      request.finish();
     }
   };
   const save = async () => {
@@ -342,22 +444,47 @@ export default function MenuEditor({
     const next = items.some((item) => item.id === cleaned.id)
       ? items.map((item) => (item.id === cleaned.id ? cleaned : item))
       : [...items, cleaned];
-    if (await persistMenu(next, "Carta guardada correctamente.")) setDraft(null);
+    const request = beginRequest();
+    try {
+      if (!request.current()) return;
+      const saved = await persistMenu(next, "Carta guardada correctamente.");
+      if (request.current() && saved) setDraft(null);
+    } finally { request.finish(); }
   };
   const remove = async (id: string) => {
     const item = items.find((candidate) => candidate.id === id);
     if (!item || !window.confirm(`¿Eliminar «${item.name}» de la carta? Esta acción no se puede deshacer.`)) return;
     const next = items.filter((item) => item.id !== id);
-    if (await persistMenu(next, "Producto eliminado.")) setDraft((current) => current?.id === id ? null : current);
+    const request = beginRequest();
+    try {
+      if (!request.current()) return;
+      const saved = await persistMenu(next, "Producto eliminado.");
+      if (request.current() && saved) setDraft((current) => current?.id === id ? null : current);
+    } finally { request.finish(); }
   };
   const toggleAvailability = async (item: Item) => {
-    if (saving || uploading) return;
-    const updated = { ...item, available: !item.available };
-    const next = items.map((candidate) => candidate.id === item.id ? updated : candidate);
-    const status = updated.available ? "disponible" : "pausado";
-    if (await persistMenu(next, `${item.name} está ${status}.`)) {
-      setDraft((current) => current?.id === item.id ? { ...current, available: updated.available } : current);
-    }
+    if (operationLock.current || loading || uploading || importing) return;
+    const request = beginRequest();
+    if (!request.current()) { request.finish(); return; }
+    operationLock.current = true;
+    requestVersion.current += 1;
+    setSaving(true);
+    setMenuNeedsReload(true);
+    try {
+      const result = await patchPartnerMenuAvailability({ apiOrigin, headers, restaurantId: locationId, itemId: item.id, available: !(item.available !== false), signal: request.signal, isCurrent: request.current });
+      if (!request.current()) return;
+      // PATCH returns a revision, not a full snapshot. GET both together before any fullsave.
+      await load(true);
+      if (!request.current()) return;
+      setMessage(`${item.name} está ${result.available ? "disponible" : "pausado"}. Si había un borrador abierto, se conserva para revisión.`);
+    } catch (error) {
+      if (!request.current()) return;
+      if (error instanceof PartnerMenuRequestError && error.status === 401) { onUnauthorized(); return; }
+      if (error instanceof PartnerMenuRequestError && error.status === 403) { setMessage("Este perfil no tiene permiso para modificar la carta del local activo."); return; }
+      await load(true);
+      if (!request.current()) return;
+      setMessage(error instanceof Error ? error.message : "No se pudo actualizar la disponibilidad.");
+    } finally { if (request.current()) { operationLock.current = false; setSaving(false); } request.finish(); }
   };
   const updateDraft = (patch: Partial<Item>) =>
     setDraft((current) => (current ? { ...current, ...patch } : current));
@@ -391,7 +518,7 @@ export default function MenuEditor({
         : current,
     );
   const duplicate = (item: Item) =>
-    setDraft({
+    openDraft({
       ...item,
       // This timestamp is generated only from the duplicate button handler.
       // oxlint-disable-next-line react/purity
@@ -413,7 +540,7 @@ export default function MenuEditor({
           <button
             className="secondary-button"
             onClick={() => void load()}
-            disabled={loading}
+            disabled={loading || saving || uploading || importing}
           >
             Actualizar
           </button>
@@ -430,7 +557,7 @@ export default function MenuEditor({
               }}
             />
           </label>
-          <button className="primary-button" onClick={() => setDraft(blank())}>
+          <button className="primary-button" disabled={loading || saving || menuNeedsReload} onClick={() => openDraft(blank())}>
             <Plus size={16} /> Nuevo producto
           </button>
         </div>
@@ -446,6 +573,15 @@ export default function MenuEditor({
           <Check size={16} /> {message}
         </p>
       )}
+      {draft && (staleDraft || menuNeedsReload) && <aside className="menu-demo-notice" role="alert">
+        <strong>Borrador conservado · revisión necesaria</strong>
+        <span>No guardaremos este borrador sobre una carta distinta o sin revisión confirmada. Copia los cambios que quieras conservar antes de cargar el producto actual.</span>
+        <button type="button" className="secondary-button" disabled={loading || saving || menuNeedsReload} onClick={() => {
+          if (!window.confirm("¿Descartar este borrador y cargar el producto de la carta actual? Copia antes los cambios que quieras conservar.")) return;
+          const current = items.find((item) => item.id === draft.id);
+          if (current) openDraft(current); else setDraft(null);
+        }}>Descartar borrador y cargar producto actual</button>
+      </aside>}
       <section className="menu-assets-panel" aria-label="Archivos de carta y menús">
         <div className="menu-assets-header">
           <div>
@@ -574,7 +710,7 @@ export default function MenuEditor({
                       type="button"
                       className={`availability-toggle ${item.available ? "is-on" : ""}`}
                       onClick={() => void toggleAvailability(item)}
-                      disabled={saving}
+                      disabled={saving || uploading || importing || loading}
                       role="switch"
                       aria-checked={item.available}
                       aria-label={
@@ -592,7 +728,8 @@ export default function MenuEditor({
                     </button>
                     <button
                       className="secondary-button compact-button"
-                      onClick={() => setDraft(item)}
+                      onClick={() => openDraft(item)}
+                      disabled={saving || loading || menuNeedsReload}
                     >
                       Editar
                     </button>
@@ -607,7 +744,8 @@ export default function MenuEditor({
               <span>Añade el primer producto para empezar tu carta.</span>
               <button
                 className="primary-button"
-                onClick={() => setDraft(blank())}
+                onClick={() => openDraft(blank())}
+                disabled={saving || loading || menuNeedsReload}
               >
                 <Plus size={16} /> Añadir producto
               </button>
@@ -924,7 +1062,7 @@ export default function MenuEditor({
                     type="button"
                     className="danger-button"
                     onClick={() => void remove(draft.id)}
-                    disabled={saving || uploading}
+                    disabled={saving || uploading || loading || menuNeedsReload || staleDraft}
                   >
                     <Trash2 size={15} /> Eliminar
                   </button>
@@ -932,7 +1070,7 @@ export default function MenuEditor({
                 <button
                   className="primary-button save-button"
                   onClick={() => void save()}
-                  disabled={saving || uploading}
+                  disabled={saving || uploading || loading || menuNeedsReload || staleDraft}
                 >
                   <Save size={16} />{" "}
                   {saving ? "Guardando…" : "Guardar producto"}

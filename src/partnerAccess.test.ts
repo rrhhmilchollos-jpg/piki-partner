@@ -6,6 +6,18 @@ const other = { _id: "fixture-other", name: "Otro local", tenant: "fixture-tenan
 const employee = { name: "Operador de prueba", role: "owner", tenant: "fixture-tenant", lifecycle: "active", restaurantIds: [kazoku._id] };
 
 describe("Partner access adapter (fixtures only)", () => {
+  it.each(["cashier", "kitchen", "viewer"])("keeps action permissions separate for %s", (role) => {
+    const local = normalisePartnerProfile({ employee: { ...employee, role }, restaurants: [kazoku] }).locations[0];
+    expect(hasPermission(local, "orders:write")).toBe(role === "cashier");
+    expect(hasPermission(local, "orders:prepare")).toBe(role === "kitchen");
+    expect(hasPermission(local, "orders:cancel")).toBe(false);
+  });
+  it("orders:write never aliases orders:prepare or orders:cancel", () => {
+    const local = normalisePartnerProfile({ employee: { ...employee, permissions: ["orders:write"] }, restaurants: [kazoku] }).locations[0];
+    expect(hasPermission(local, "orders:write")).toBe(true);
+    expect(hasPermission(local, "orders:prepare")).toBe(false);
+    expect(hasPermission(local, "orders:cancel")).toBe(false);
+  });
   it("resolves the server-assigned Kazoku ID and filters another restaurant", () => {
     const profile = normalisePartnerProfile({ employee, restaurants: [kazoku, other] });
     expect(profile.locations.map((location) => location.id)).toEqual([kazoku._id]);

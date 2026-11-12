@@ -4,6 +4,29 @@ import { partnerEventMatchesLocation } from "./partnerOrderEvents";
 
 const paid = { _id: "fixture-order", publicCode: "FIX-123", status: "pending", paymentState: "paid" };
 describe("Kitchen order signals", () => {
+  it.each(["authorized", "paid"])("keeps %s pending alarms across initial REST, SSE replay and recovery REST", (paymentState) => {
+    const snapshot = { ...paid, paymentMethod: "stripe" as const, paymentState };
+    const rest = createPartnerOrderSignals();
+    expect(rest.reconcile([snapshot])).toHaveLength(1);
+    expect(rest.notify("new_order", snapshot._id)).toEqual([]);
+    expect(rest.reconcile([snapshot])).toEqual([]);
+    expect([...rest.pendingIds]).toEqual([snapshot._id]);
+    const sse = createPartnerOrderSignals();
+    expect(sse.notify("new_order", snapshot._id)).toHaveLength(1);
+    expect(sse.reconcile([snapshot])).toEqual([]);
+    expect([...sse.pendingIds]).toEqual([snapshot._id]);
+    sse.resolve(snapshot._id);
+    expect(sse.reconcile([snapshot])).toEqual([]);
+    expect(sse.pendingIds.size).toBe(0);
+  });
+  it.each(["unpaid", "failed", "refunded", "cancelled", undefined])("does not keep a fake unpaid online alarm (%s)", (paymentState) => {
+    const snapshot = { ...paid, paymentMethod: "stripe" as const, paymentState };
+    const tracker = createPartnerOrderSignals();
+    expect(tracker.reconcile([snapshot])).toEqual([]);
+    tracker.notify("new_order", snapshot._id);
+    expect(tracker.reconcile([snapshot])).toEqual([]);
+    expect(tracker.pendingIds.size).toBe(0);
+  });
   it("alerts a paid pending snapshot once", () => {
     const tracker = createPartnerOrderSignals();
     expect(tracker.reconcile([paid])).toEqual([{ kind: "new_order", orderId: paid._id, publicCode: paid.publicCode }]);

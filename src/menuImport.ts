@@ -106,18 +106,12 @@ export function sanitizeModifier(modifier: Modifier): Modifier {
   const optionItems = modifier.optionItems
     .map((option) => ({ ...option, name: option.name.trim(), price: safePrice(option.price) }))
     .filter((option) => option.name);
-  const count = optionItems.length;
-  const minSelections = Math.min(modifier.required ? Math.max(1, modifier.minSelections) : 0, count);
-  const maxSelections = Math.min(
-    Math.max(1, minSelections, Math.floor(modifier.maxSelections) || 1), Math.max(1, count),
-  );
+  // Availability and option cleanup are not edits to the group's contractual bounds.
+  // Even an unsatisfiable group must retain its requirements for the central API to enforce.
   const availablePrices = optionItems.filter((option) => option.available).map((option) => option.price);
   return {
     ...modifier,
     name: modifier.name.trim(),
-    required: minSelections > 0,
-    minSelections,
-    maxSelections,
     optionItems,
     options: optionItems.filter((option) => option.available).map((option) => option.name),
     price: availablePrices.length ? Math.min(...availablePrices) : 0,

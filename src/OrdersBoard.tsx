@@ -9,6 +9,7 @@ import { visibleOrderReference } from "./orderReference";
 import { usePartnerKitchenReception } from "./PartnerKitchenReception";
 import SunmiPdaBoard from "./SunmiPdaBoard";
 import { printOrderToSunmi } from "./sunmiPrinter";
+import { canTransitionPartnerOrder, partnerOrderCountdown, partnerOrderDeadline } from "./partnerOrderPolicy";
 
 /* oxlint-disable react/set-state-in-effect -- effects synchronise external partner order data. */
 
@@ -68,18 +69,6 @@ function riderAssignmentLabel(order: PartnerOrder): string {
   return "Buscando Rider disponible…";
 }
 
-function orderDeadline(order: PartnerOrder): number {
-  const explicit = order.acceptanceDeadline || order.preparationDeadline || order.estimatedReadyAt;
-  const parsed = explicit ? new Date(explicit).getTime() : Number.NaN;
-  if (Number.isFinite(parsed)) return parsed;
-  return new Date(order.createdAt).getTime() + 12 * 60_000;
-}
-
-function countdown(order: PartnerOrder, now: number): string {
-  const seconds = Math.max(0, Math.floor((orderDeadline(order) - now) / 1_000));
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
 function money(cents?: number): string {
   return ((cents ?? 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" });
 }
@@ -115,7 +104,8 @@ export default function OrdersBoard({
   token,
   locationId,
   canRead,
-  canOperate,
+  canAccept,
+  canPrepare,
   canCancel,
   pdaMode = false,
   onUnauthorized,
@@ -123,7 +113,8 @@ export default function OrdersBoard({
   token: string;
   locationId?: string;
   canRead: boolean;
-  canOperate: boolean;
+  canAccept: boolean;
+  canPrepare: boolean;
   canCancel: boolean;
   pdaMode?: boolean;
   onUnauthorized: () => void;
@@ -137,9 +128,11 @@ export default function OrdersBoard({
   const [printingOrder, setPrintingOrder] = useState<PartnerOrder | null>(null);
   const [preparationMinutesByOrder, setPreparationMinutesByOrder] = useState<Record<string, number>>({});
   const transitionLockRef = useRef<string | null>(null);
-  const { orders, loading, receptionMessage, realtimeState, now, load, activeCount, audioReady, prepareAudio, resolveOrder, notifyCancelledOrder } = usePartnerKitchenReception();
+  const { orders, loading, receptionMessage, realtimeState, now, load, applyConfirmedOrder, activeCount, audioReady, prepareAudio, resolveOrder, notifyCancelledOrder } = usePartnerKitchenReception();
   const message = [receptionMessage, operationMessage].filter(Boolean).join(" · ");
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
+  const canMove = (status: string) => canRead && canTransitionPartnerOrder(status, { canAccept, canPrepare, canCancel });
+  const selectedPreparationMinutes = (order: PartnerOrder) => preparationMinutesByOrder[order._id] ?? order.preparationMinutes ?? 20;
   usePwaUpdateBlocker("partner-order-operation", Boolean(busyOrderId) || supportBusy || supportOpen);
 
   useEffect(() => {
@@ -162,7 +155,7 @@ export default function OrdersBoard({
   const move = async (order: PartnerOrder, status: OrderStatus | "cancelled", preparationMinutes?: number) => {
     // State updates are asynchronous, so a ref closes the brief interval in
     // which a fast double tap could otherwise start two PATCH requests.
-    if (transitionLockRef.current || !canRead || !canOperate) return;
+    if (transitionLockRef.current || !canMove(status)) return;
     transitionLockRef.current = order._id;
     setBusyOrderId(order._id);
     try {
@@ -171,13 +164,15 @@ export default function OrdersBoard({
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({ status, ...(["accepted", "preparing"].includes(status) ? { preparationMinutes: preparationMinutes ?? 20 } : {}) }),
       });
-      const payload = await response.json().catch(() => ({})) as { error?: string; message?: string };
+      const payload = await response.json().catch(() => ({})) as { error?: string; message?: string; order?: PartnerOrder };
       if (response.status === 401) { onUnauthorized(); return; }
       if (response.status === 403) { setMessage("No tienes permiso para realizar esta acción en el pedido."); return; }
       if (!response.ok) throw new Error(payload.message || payload.error || `HTTP ${response.status}`);
+      const confirmed = payload.order?._id === order._id && payload.order.status === status ? { ...order, ...payload.order } : null;
+      if (confirmed) applyConfirmedOrder(confirmed);
       if (status === "accepted") {
         resolveOrder(order._id);
-        await printOrder({ ...order, status: "accepted" });
+        await printOrder(confirmed ?? { ...order, status: "accepted" });
       }
       setMessage(status === "accepted" ? "Pedido aceptado. Empieza la preparación cuando el equipo esté listo." : "Pedido actualizado correctamente.");
       if (status === "cancelled") notifyCancelledOrder(order._id, order.publicCode);
@@ -224,15 +219,16 @@ export default function OrdersBoard({
     loading={loading}
     message={message}
     busy={Boolean(busyOrderId)}
-    canOperate={canOperate}
+    canAccept={canRead && canAccept}
+    canPrepare={canRead && canPrepare}
     activeCount={activeCount}
     audioReady={audioReady}
     realtimeState={realtimeState}
     connectionLabel={connectionLabel}
-    preparationMinutes={pdaOrder ? preparationMinutesByOrder[pdaOrder._id] ?? 20 : 20}
+    preparationMinutes={pdaOrder ? selectedPreparationMinutes(pdaOrder) : 20}
     onPreparationMinutesChange={(minutes) => { if (pdaOrder) setPreparationMinutesByOrder((previous) => ({ ...previous, [pdaOrder._id]: minutes })); }}
-    onAccept={() => { if (pdaOrder) void move(pdaOrder, "accepted", preparationMinutesByOrder[pdaOrder._id] ?? 20); }}
-    onReady={() => { if (pdaOrder) void move(pdaOrder, "ready_for_pickup", preparationMinutesByOrder[pdaOrder._id] ?? 20); }}
+    onAccept={() => { if (pdaOrder) void move(pdaOrder, "accepted", selectedPreparationMinutes(pdaOrder)); }}
+    onReady={() => { if (pdaOrder) void move(pdaOrder, "ready_for_pickup", selectedPreparationMinutes(pdaOrder)); }}
     onPrint={() => { if (pdaOrder) void printOrder(pdaOrder); }}
     onEnableAudio={() => { void prepareAudio(); }}
   />;
@@ -270,9 +266,10 @@ export default function OrdersBoard({
             {laneOrders.map((order) => <article key={order._id} className={`order-card ${lane.status === "pending" ? "is-new" : ""}`}>
               <div className="order-card-top">
                 <div><div className="order-card-status"><span className="status-dot" />{filterLabels[lane.status]}</div><span className="order-code">{visibleOrderReference(order.publicCode, order._id)}</span><small>{order.customer?.name || "Cliente PIKI"}</small><small>Recibido a las {orderTime(order.createdAt)}</small></div>
-                <div className={`countdown ${orderDeadline(order) <= now ? "is-late" : ""}`}><Clock3 size={15} /><b>{countdown(order, now)}</b></div>
+                {["pending", "accepted", "preparing"].includes(order.status) && <div className={`countdown ${partnerOrderDeadline(order).confirmed && (partnerOrderDeadline(order).at ?? Infinity) <= now ? "is-late" : ""}`}><Clock3 size={15} /><b>{partnerOrderCountdown(order, now)}</b></div>}
               </div>
               <ul className="order-items">{(order.items ?? []).map((item, index) => <li key={`${order._id}-${index}`}><b>{item.quantity ?? 1}×</b><span><strong>{item.name || "Producto"}</strong>{item.selectedOptions?.length ? <small>{item.selectedOptions.map((option) => option.optionName).filter(Boolean).join(" · ")}</small> : null}</span></li>)}</ul>
+              {order.deliveryNote?.trim() && <div className="sunmi-special-alert order-special-note" role="note"><CircleAlert size={20} /><span><strong>NOTA DEL PEDIDO</strong><small>{order.deliveryNote.trim()}</small></span></div>}
               {order.deliveryAddress && <p className="order-address"><span>Entrega</span>{order.deliveryAddress}</p>}
               <div className="order-meta"><span>{isCashOrder(order) ? "Contra reembolso" : "Pago online"}</span><strong>{money(order.totalCents)}</strong></div>
               {order.riderTracking && <div className="rider-tracking-card">
@@ -285,9 +282,9 @@ export default function OrdersBoard({
                 <strong>Información para el Rider</strong>
                 {order.status === "ready_for_pickup" ? <span>✅ Listo para recoger · {riderAssignmentLabel(order)}{order.pickupPin ? <><br />PIN de recogida: <b>{order.pickupPin}</b></> : null}</span> : order.status === "pending" ? <span>Acepta el pedido para iniciar la preparación.</span> : <span>⏱️ Estará listo en {order.preparationMinutes ?? 20} minutos · {riderAssignmentLabel(order)}</span>}
               </div>
-              {order.status === "accepted" && <label className="preparation-time-control">Tiempo estimado de preparación<select value={preparationMinutesByOrder[order._id] ?? 20} onChange={(event) => setPreparationMinutesByOrder((previous) => ({ ...previous, [order._id]: Number(event.target.value) }))}>{[15, 20, 30, 45].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutos</option>)}</select></label>}
+              {order.status === "accepted" && <label className="preparation-time-control">Tiempo estimado de preparación<select disabled={!canMove("preparing") || Boolean(busyOrderId)} value={selectedPreparationMinutes(order)} onChange={(event) => setPreparationMinutesByOrder((previous) => ({ ...previous, [order._id]: Number(event.target.value) }))}>{[15, 20, 30, 45].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutos</option>)}</select></label>}
               <div className="order-card-actions">
-                {lane.action && <button type="button" className="order-action" disabled={!canOperate || Boolean(busyOrderId)} onClick={() => void move(order, lane.action!.to, preparationMinutesByOrder[order._id] ?? 20)}>{busyOrderId === order._id ? "Guardando…" : lane.action.label}{order.status === "accepted" ? ` · ${preparationMinutesByOrder[order._id] ?? 20} min` : ""}<ChevronRight size={17} /></button>}
+                {lane.action && <button type="button" className="order-action" disabled={!canMove(lane.action.to) || Boolean(busyOrderId)} onClick={() => void move(order, lane.action!.to, selectedPreparationMinutes(order))}>{busyOrderId === order._id ? "Guardando…" : lane.action.label}{order.status === "accepted" ? ` · ${selectedPreparationMinutes(order)} min` : ""}<ChevronRight size={17} /></button>}
                 {lane.status === "ready_for_pickup" && <button type="button" className="ready-label" disabled>{riderAssignmentLabel(order)}</button>}
                 <button type="button" className="print-control" onClick={() => printOrder(order)} aria-label={`Imprimir pedido ${order.publicCode || order._id}`} title={order.status === "pending" ? "Acepta primero para comunicar el plazo al Rider" : "Imprimir ticket"}><Printer size={16} /></button>
               </div>
