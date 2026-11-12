@@ -169,10 +169,14 @@ export default function OrdersBoard({
       if (response.status === 403) { setMessage("No tienes permiso para realizar esta acción en el pedido."); return; }
       if (!response.ok) throw new Error(payload.message || payload.error || `HTTP ${response.status}`);
       const confirmed = payload.order?._id === order._id && payload.order.status === status ? { ...order, ...payload.order } : null;
-      if (confirmed) applyConfirmedOrder(confirmed);
+      if (!confirmed) {
+        await load();
+        throw new Error("El servidor no ha confirmado este cambio. Revisa el estado actualizado antes de volver a actuar; no se ha impreso ninguna comanda.");
+      }
+      applyConfirmedOrder(confirmed);
       if (status === "accepted") {
         resolveOrder(order._id);
-        await printOrder(confirmed ?? { ...order, status: "accepted" });
+        await printOrder(confirmed);
       }
       setMessage(status === "accepted" ? "Pedido aceptado. Empieza la preparación cuando el equipo esté listo." : "Pedido actualizado correctamente.");
       if (status === "cancelled") notifyCancelledOrder(order._id, order.publicCode);

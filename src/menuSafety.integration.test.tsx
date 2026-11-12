@@ -274,6 +274,21 @@ describe("Kitchen operation callbacks (offline)", () => {
     expect(ticket.props.order.paymentState).toBe("authorized");
     expect(reception.load).toHaveBeenCalledTimes(1);
   });
+  it.each([{}, { order: { _id: "wrong-order", status: "accepted" } }, { order: { _id: "correct-order", status: "pending" } }])("does not print, resolve or announce success for an unconfirmed HTTP 200 ack: %j", async (payload) => {
+    reception.orders = [fixture];
+    const body = structuredClone(payload);
+    if (body.order?._id === "correct-order") body.order._id = fixture._id;
+    globalThis.fetch = vi.fn(async () => Response.json(body));
+    button(renderBoard({ canAccept: true, canPrepare: false, canCancel: false }), "Aceptar pedido").props.onClick(); await tick();
+    expect(reception.applyConfirmedOrder).not.toHaveBeenCalled();
+    expect(reception.resolveOrder).not.toHaveBeenCalled();
+    expect(nativePrint).not.toHaveBeenCalled();
+    expect(reception.load).toHaveBeenCalledTimes(1);
+    const result = renderBoard();
+    expect(nodes(result).some((node) => node.type === PrintablePartnerTicket)).toBe(false);
+    expect(JSON.stringify(result)).toContain("El servidor no ha confirmado este cambio");
+    expect(JSON.stringify(result)).not.toContain("Pedido aceptado. Empieza la preparación");
+  });
 });
 
 function deferred<T>() {
