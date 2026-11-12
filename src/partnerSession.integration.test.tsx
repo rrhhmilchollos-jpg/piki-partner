@@ -135,3 +135,31 @@ describe("App session-scoped unauthorized handler (offline)", () => {
     expect(localStorage.getItem(tokenKey)).toBe("B");
   });
 });
+
+describe("Owner portfolio App selector and consultative pending status (offline)", () => {
+  it("selects all seven backend locals, disables pending reception/edits and never labels pending as accepting", async () => {
+    const locations = Array.from({ length: 7 }, (_, index) => ({ id: `fixture-local-${index}`, tenantId: "fixture-tenant", name: `Offline local ${index}`, roles: ["owner"], permissions: index < 5 ? ["*"] : ["menu:read"], isOpen: index < 5, ordersEnabled: index < 5, readOnly: index >= 5, reason: index < 5 ? "open" : "not_approved" }));
+    globalThis.fetch = vi.fn(async () => Response.json({ employee: { name: "Offline owner", tenantId: "fixture-tenant", roles: ["owner"], permissions: ["*"], locations } }));
+    let tree = await login("OFFLINE_OWNER");
+    const selector = nodes(tree).find((node) => node.type === "select" && node.props["aria-label"] === "Seleccionar local")!;
+    expect(nodes(selector).filter((node) => node.type === "option")).toHaveLength(7);
+    selector.props.onChange({ target: { value: locations[5].id } });
+    tree = renderApp();
+    const reception = nodes(tree).find((node) => node.type?.name === "PartnerKitchenReceptionProvider")!;
+    expect(reception.props.locationId).toBe(locations[5].id);
+    expect(reception.props.canRead).toBe(false);
+    expect(nodes(tree).some((node) => node.type === MenuEditor)).toBe(false);
+    const control = nodes(tree).find((node) => node.type?.name === "StoreStatusControl")!;
+    expect(control.props.enabled).toBe(false);
+    const savedRuntime = runtime.current;
+    runtime.current = runtime.editor; runtime.editor.cursor = 0;
+    const status = control.type(control.props);
+    runtime.current = savedRuntime;
+    const flattened = JSON.stringify(status);
+    expect(flattened).toContain("SOLO CONSULTA");
+    expect(flattened).toContain("No operativo · sin pedidos");
+    expect(flattened).not.toContain("Aceptando pedidos");
+    expect(nodes(status).find((node) => node.props?.role === "switch")?.props.disabled).toBe(true);
+    expect(nodes(tree).some((node) => node.props?.role === "status")).toBe(true);
+  });
+});

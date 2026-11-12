@@ -22,6 +22,9 @@ export type PartnerLocation = {
   promoted?: boolean;
   availabilityStatus?: "available" | "coming_soon";
   isOpen?: boolean;
+  ordersEnabled?: boolean;
+  readOnly?: boolean;
+  reason?: string;
   roles: string[];
   permissions: string[];
   tenant?: string;
@@ -102,6 +105,9 @@ function normaliseLocation(value: unknown): Omit<PartnerLocation, "roles" | "per
     promoted: bool(source.promoted),
     availabilityStatus: source.availabilityStatus === "coming_soon" ? "coming_soon" : source.availabilityStatus === "available" ? "available" : undefined,
     isOpen: bool(source.isOpen) ?? bool(source.open) ?? (text(source.status).toLowerCase() === "open" ? true : undefined),
+    ordersEnabled: bool(source.ordersEnabled),
+    readOnly: bool(source.readOnly),
+    reason: text(source.reason) || undefined,
   };
 }
 
@@ -152,6 +158,10 @@ function mergeLocations(locations: PartnerLocation[]): PartnerLocation[] {
     existing.partnerCode ??= location.partnerCode;
     existing.cuisine ??= location.cuisine; existing.category ??= location.category; existing.locality ??= location.locality;
     existing.isOpen ??= location.isOpen;
+    // A second metadata source must not resurrect a read-only/order-disabled local.
+    if (location.readOnly === true) existing.readOnly = true;
+    if (location.ordersEnabled === false) existing.ordersEnabled = false;
+    existing.reason ??= location.reason;
     existing.address ??= location.address; existing.email ??= location.email; existing.phone ??= location.phone;
     existing.deliveryFeeCents ??= location.deliveryFeeCents; existing.commissionRateBps ??= location.commissionRateBps; existing.promoted ??= location.promoted; existing.availabilityStatus ??= location.availabilityStatus;
     return result;
@@ -203,9 +213,17 @@ export function normalisePartnerProfile(value: unknown): PartnerProfile {
     partner.restaurant,
   ];
   const directLocations = locationInput
-    .map(normaliseLocation)
-    .filter((location): location is Omit<PartnerLocation, "roles" | "permissions"> => Boolean(location))
-    .map((location) => ({ ...location, roles: globalRoles, permissions: effectiveGlobalPermissions }));
+    .map((value): PartnerLocation | null => {
+      const source = record(value);
+      const location = normaliseLocation(value);
+      if (!location) return null;
+      const roles = scopeRoles(source, globalRoles);
+      const ownRoles = Array.isArray(source.roles) || Boolean(firstText(source.role, source.employeeRole));
+      const permissions = Array.isArray(source.permissions) ? stringList(source.permissions)
+        : ownRoles ? rolePermissions(roles) : effectiveGlobalPermissions;
+      return { ...location, roles, permissions };
+    })
+    .filter((location): location is PartnerLocation => Boolean(location));
   // An explicit membership list is authoritative, including an empty or invalid one.
   const membershipProvided = [payload, employee].some((source) => Array.isArray(source.memberships) || Array.isArray(source.assignments));
   const candidates = membershipProvided ? memberships : directLocations;
@@ -256,6 +274,8 @@ export function displayRole(role: string): string {
 
 export function hasPermission(location: PartnerLocation | null | undefined, permission: string): boolean {
   if (!location) return false;
+  if (location.readOnly === true && permission !== "menu:read") return false;
+  if (location.ordersEnabled === false && permission.startsWith("orders:")) return false;
   if (location.permissions.includes("*")) return true;
   if (location.permissions.includes(permission)) return true;
   if (permission === "menu:read") return location.permissions.includes("menu:write");
