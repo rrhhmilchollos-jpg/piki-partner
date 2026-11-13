@@ -1,5 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 import { resolvePartnerApiOrigin } from "./partnerApiOrigin";
+import { accountPhotoUrl } from "./accountPhoto";
 
 export const apiOrigin = resolvePartnerApiOrigin({
   production: import.meta.env.PROD,
@@ -32,7 +33,12 @@ export type PartnerLocation = {
 };
 
 export type PartnerProfile = {
+  id: string;
   name: string;
+  fullName: string;
+  photoUrl: string | null;
+  jobRole: string;
+  role: string;
   email: string;
   locations: PartnerLocation[];
   tenant?: string;
@@ -239,7 +245,12 @@ export function normalisePartnerProfile(value: unknown): PartnerProfile {
     && (!tenant || !location.tenant || location.tenant === tenant));
 
   return {
-    name: firstText(employee.name, employee.fullName, payload.name, payload.fullName, employee.email, payload.email) || "Equipo Partner",
+    id: firstText(employee.id, employee._id),
+    name: firstText(employee.fullName, employee.name, payload.fullName, payload.name),
+    fullName: firstText(employee.fullName, employee.name, payload.fullName, payload.name),
+    photoUrl: accountPhotoUrl(employee.photoUrl),
+    jobRole: text(employee.jobRole),
+    role: text(employee.role),
     email: firstText(employee.email, payload.email),
     tenant: tenant || undefined,
     lifecycle: lifecycle || undefined,
@@ -269,7 +280,7 @@ export function displayRole(role: string): string {
     read_only: "Solo lectura",
     operador: "Operador",
   };
-  return labels[role.toLowerCase()] ?? "Operador";
+  return labels[role.toLowerCase()] ?? role;
 }
 
 export function hasPermission(location: PartnerLocation | null | undefined, permission: string): boolean {

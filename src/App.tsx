@@ -19,6 +19,7 @@ import { partnerSessionIssue, shouldClearPartnerSession } from "./sessionRecover
 import PartnerNativeNotificationControl from "./PartnerNativeNotificationControl";
 import { PartnerKitchenReceptionProvider } from "./PartnerKitchenReception";
 import { isPartnerNativeAndroid, partnerNativeNotifications } from "./partnerNativeNotifications";
+import PartnerAccountIdentity from "./PartnerAccountIdentity";
 
 /* oxlint-disable react/set-state-in-effect -- effects reconcile authenticated profile and active location. */
 
@@ -36,6 +37,10 @@ const navigation: Array<{ id: View; label: string; icon: typeof Bell }> = [
 
 function storedToken(): string { return localStorage.getItem(tokenKey) || sessionStorage.getItem(tokenKey) || ""; }
 function saveToken(token: string): void { localStorage.setItem(tokenKey, token); sessionStorage.removeItem(tokenKey); }
+
+function accountIdentityKey(profile: PartnerProfile): string {
+  return JSON.stringify([profile.id, profile.email, profile.tenant]);
+}
 
 function confirmedOpen(payload: unknown, fallback: boolean): boolean {
   const data = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
@@ -161,7 +166,9 @@ function PartnerOperationsApp() {
   const [token, setToken] = useState(storedToken);
   const [sessionEpoch, setSessionEpoch] = useState(0);
   const currentSession = useRef({ token, epoch: 0 });
+  const currentAccountIdentity = useRef<string | null>(null);
   const [profile, setProfile] = useState<PartnerProfile | null>(null);
+  const photoRevision = useRef(0);
   const [activeLocationId, setActiveLocationId] = useState("");
   const [checkingSession, setCheckingSession] = useState(Boolean(token));
   const [sessionIssue, setSessionIssue] = useState("");
@@ -175,6 +182,7 @@ function PartnerOperationsApp() {
     // Invalidate synchronously, before React rerenders or another login can reuse the token.
     const epoch = currentSession.current.epoch + 1;
     currentSession.current = { token: "", epoch };
+    currentAccountIdentity.current = null;
     setSessionEpoch(epoch);
     if (isPartnerNativeAndroid()) void partnerNativeNotifications.clearAllOrders().catch(() => undefined);
     localStorage.removeItem(tokenKey);
@@ -184,7 +192,48 @@ function PartnerOperationsApp() {
     setActiveLocationId("");
     setCheckingSession(false);
     setSessionIssue("");
+    setMenuOpen(false);
   }, [isCurrentSession]);
+
+  const logout = useCallback(async () => {
+    if (!isCurrentSession()) return;
+    const oldToken = currentSession.current.token;
+    clearSession(); // Clear locally before sending a best-effort revocation of this session only.
+    if (!oldToken) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 10_000);
+    try {
+      await fetch(`${apiOrigin}/api/v1/auth/employee/logout`, {
+        method: "POST", headers: partnerHeaders(oldToken), cache: "no-store", signal: controller.signal,
+      });
+      // The response must never mutate a newer account/session.
+    } catch { /* Local logout remains complete even offline or on timeout. */ }
+    finally { window.clearTimeout(timer); }
+  }, [clearSession, isCurrentSession]);
+
+  const replaceSession = useCallback((nextToken: string) => {
+    const epoch = currentSession.current.epoch + 1;
+    currentSession.current = { token: nextToken, epoch };
+    currentAccountIdentity.current = null;
+    setSessionEpoch(epoch);
+    setProfile(null);
+    setActiveLocationId("");
+    setSessionIssue("");
+    setMenuOpen(false);
+    setActiveView("orders");
+    setToken(nextToken);
+    setCheckingSession(Boolean(nextToken));
+  }, []);
+
+  useEffect(() => {
+    const storageChanged = (event: StorageEvent) => {
+      if (event.key !== tokenKey && event.key !== null) return;
+      const nextToken = storedToken();
+      if (nextToken !== currentSession.current.token) replaceSession(nextToken);
+    };
+    window.addEventListener("storage", storageChanged);
+    return () => window.removeEventListener("storage", storageChanged);
+  }, [replaceSession]);
 
   const retrySession = () => {
     setSessionIssue("");
@@ -198,10 +247,12 @@ function PartnerOperationsApp() {
     let validationSequence = 0;
     let validationRequest: AbortController | null = null;
     const validate = async () => {
+      // Repeated visibility wakes share the in-flight /me, never a second header fetch.
+      if (validationRequest) return;
       const sequence = ++validationSequence;
-      validationRequest?.abort();
       const request = new AbortController();
       validationRequest = request;
+      const requestedPhotoRevision = photoRevision.current;
       const timeout = window.setTimeout(() => request.abort(), 8_000);
       try {
         const response = await fetch(`${apiOrigin}/api/v1/auth/employee/me`, { headers: partnerHeaders(token), cache: "no-store", signal: request.signal });
@@ -210,7 +261,7 @@ function PartnerOperationsApp() {
           if (!cancelled) {
             if (shouldClearPartnerSession(response.status)) clearSession();
             else {
-              if (response.status === 403) setProfile(null);
+              if (response.status === 403) { currentAccountIdentity.current = null; setProfile(null); }
               setSessionIssue(partnerSessionIssue(response.status)); setCheckingSession(false);
             }
           }
@@ -218,7 +269,9 @@ function PartnerOperationsApp() {
         }
         const next = normalisePartnerProfile(await response.json());
         if (!cancelled && !request.signal.aborted && sequence === validationSequence && isCurrentSession()) {
-          setProfile(next);
+          currentAccountIdentity.current = accountIdentityKey(next);
+          setProfile((current) => current && requestedPhotoRevision !== photoRevision.current && accountIdentityKey(current) === accountIdentityKey(next)
+            ? { ...next, photoUrl: current.photoUrl } : next);
           setActiveLocationId((current) => next.locations.some((location) => location.id === current) ? current : next.locations[0]?.id || "");
           setCheckingSession(false);
           setSessionIssue("");
@@ -227,6 +280,7 @@ function PartnerOperationsApp() {
         if (!cancelled && sequence === validationSequence && isCurrentSession()) { setSessionIssue(partnerSessionIssue()); setCheckingSession(false); }
       } finally {
         window.clearTimeout(timeout);
+        if (validationRequest === request) validationRequest = null;
       }
     };
     void validate();
@@ -237,14 +291,23 @@ function PartnerOperationsApp() {
   }, [clearSession, isCurrentSession, token, sessionRetry]);
 
   if (checkingSession) return <main className="auth-page"><p>Comprobando acceso seguro a PIKI Partner Orders…</p></main>;
-  if (token && !profile && sessionIssue) return <SessionRecovery message={sessionIssue} onRetry={retrySession} onLogout={clearSession} />;
+  if (token && !profile && sessionIssue) return <SessionRecovery message={sessionIssue} onRetry={retrySession} onLogout={logout} />;
   if (!token || !profile) return <main className="auth-page"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(nextToken) => {
-    const epoch = currentSession.current.epoch + 1;
-    currentSession.current = { token: nextToken, epoch };
-    setSessionEpoch(epoch);
-    saveToken(nextToken); setToken(nextToken); setCheckingSession(true); window.dispatchEvent(new Event("piki-authenticated"));
+    replaceSession(nextToken);
+    saveToken(nextToken);
+    window.dispatchEvent(new Event("piki-authenticated"));
   }} /></main>;
-  if (!profile.locations.length) return <MissingAssignment onLogout={clearSession} detail={profile.accessIssue} />;
+  const identityKey = `${sessionEpoch}:${accountIdentityKey(profile)}`;
+  const isCurrentIdentity = () => isCurrentSession() && currentAccountIdentity.current === accountIdentityKey(profile);
+  const identityHeader = <>
+    <PartnerAccountIdentity key={identityKey} profile={profile} token={token} identityKey={identityKey} isCurrentSession={isCurrentIdentity} onUnauthorized={clearSession} onPhotoSaved={(photoUrl) => {
+      if (!isCurrentIdentity()) return;
+      photoRevision.current += 1;
+      setProfile((current) => current && accountIdentityKey(current) === accountIdentityKey(profile) ? { ...current, photoUrl } : current);
+    }} />
+    <button type="button" className="account-logout" onClick={logout} aria-label="Cerrar sesión"><LogOut size={17} /></button>
+  </>;
+  if (!profile.locations.length) return <><header className="orders-topbar account-unassigned-topbar">{identityHeader}</header><MissingAssignment onLogout={logout} detail={profile.accessIssue} /></>;
 
   const location = profile.locations.find((item) => item.id === activeLocationId) ?? profile.locations[0];
   const canStore = hasPermission(location, "store:write");
@@ -264,14 +327,13 @@ function PartnerOperationsApp() {
   }));
   const availableNavigation = navigation.filter((item) => visibleViews.has(item.id));
   const currentView = availableNavigation.some((item) => item.id === activeView) ? activeView : availableNavigation[0]?.id;
-  const role = location.roles[0] || "operador";
 
   return <div className={`orders-app-shell ${isPdaMode ? "pda-mode" : ""}`} data-surface={isPdaMode ? "partner-pda" : "partner-orders"}>
     <aside className={`orders-sidebar ${menuOpen ? "is-visible" : ""}`} aria-label="Navegación de PIKI Partner Orders">
       <div className="orders-brand"><img src="/piki-icon-192.png" alt="Logotipo de PIKI Partner Orders" /><div><strong>PIKI</strong><span>PARTNER ORDERS</span><small className="brand-vibe">Cada pedido cuenta.</small>{isPdaMode && <small className="pda-brand-badge">MODO PDA OPERATIVO</small>}</div><button type="button" className="mobile-close" onClick={() => setMenuOpen(false)} aria-label="Cerrar menú"><X size={20} /></button></div>
       <div className="partner-establishment-card" aria-label={`Establecimiento activo: ${location.name}`}>
         <span className="partner-establishment-icon"><Store size={18} /></span>
-        <div><small>ESTABLECIMIENTO ACTIVO</small><strong>{location.name}</strong><span>{location.partnerCode || location.address || "Panel operativo del Partner"}</span></div>
+        <div><small>ESTABLECIMIENTO ACTIVO</small><strong>{location.name}</strong><span>{location.partnerCode || location.address || "Panel operativo del Partner"}</span><span className="partner-local-roles">Asignación local: {location.roles.length ? location.roles.map(displayRole).join(" · ") : "No informada"}</span></div>
       </div>
       <nav>{availableNavigation.map(({ id, label, icon: Icon }) => <button type="button" key={id} className={currentView === id ? "active" : ""} onClick={() => { setActiveView(id); setMenuOpen(false); }}><Icon size={20} /><span>{label}</span></button>)}</nav>
       <a className="sidebar-help" href="tel:+34960500685" aria-label="Llamar a Soporte PIKI al 960 500 685"><CircleHelp size={18} /><span><b>Soporte PIKI</b><small>Preparación y reparto · 960 500 685</small></span><Phone size={15} /></a>
@@ -282,7 +344,7 @@ function PartnerOperationsApp() {
       <header className="orders-topbar">
         <button type="button" className="mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Abrir menú"><Menu size={22} /></button>
         <div className="location-select"><Store size={18} /><div><span>LOCAL ACTIVO</span>{profile.locations.length > 1 ? <label><select value={location.id} onChange={(event) => setActiveLocationId(event.target.value)} aria-label="Seleccionar local">{profile.locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={16} /></label> : <strong>{location.name}</strong>}</div></div>
-        <div className="topbar-right"><StoreStatusControl token={token} location={location} enabled={canStore} onUnauthorized={clearSession} /><div className="profile-chip" aria-label={`Perfil ${profile.name} en ${location.name}`}><span>{location.name.slice(0, 1).toUpperCase()}</span><div><b>{location.name}</b><small>{profile.name} · {displayRole(role)}</small></div><button type="button" onClick={clearSession} aria-label="Cerrar sesión"><LogOut size={17} /></button></div></div>
+        <div className="topbar-right"><StoreStatusControl token={token} location={location} enabled={canStore} onUnauthorized={clearSession} />{identityHeader}</div>
       </header>
       <PartnerKitchenReceptionProvider key={`${profile.tenant || "assigned"}:${location.id}:${canOrdersRead}`} token={token} locationId={location.id} canRead={canOrdersRead} onUnauthorized={clearSession}>
       <div className="orders-page">
