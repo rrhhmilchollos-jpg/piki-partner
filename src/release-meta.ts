@@ -1,7 +1,7 @@
 export const PIKI_RELEASE = {
   "surface": "partner",
-  "version": "1.0.11",
-  "minimumVersion": "1.0.11",
-  "buildId": "7f26fbff3b3f",
-  "forceUpdate": true
+  "version": "1.0.12",
+  "minimumVersion": "0.0.0",
+  "buildId": "989a3911ef57",
+  "forceUpdate": false
 } as const;

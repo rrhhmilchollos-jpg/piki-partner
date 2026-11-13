@@ -4,6 +4,7 @@ import { setImmediate } from "node:timers";
 import App from "./App";
 import MenuEditor from "./MenuEditor";
 import EmployeeAuthGate from "./EmployeeAuthGate";
+import PartnerAccountIdentity from "./PartnerAccountIdentity";
 
 // Separate deterministic hook lifetimes for the real App and real MenuEditor callbacks.
 const runtime = vi.hoisted(() => {
@@ -85,9 +86,10 @@ const storage = () => {
 beforeEach(() => {
   for (const host of [runtime.parent, runtime.editor]) { host.slots = []; host.cursor = 0; host.effects = []; host.layouts = []; }
   vi.stubGlobal("localStorage", storage()); vi.stubGlobal("sessionStorage", storage());
-  vi.stubGlobal("window", { setTimeout: vi.fn(() => 1), clearTimeout: vi.fn(), setInterval: vi.fn(() => 1), clearInterval: vi.fn(), dispatchEvent: vi.fn() });
+  vi.stubGlobal("window", { setTimeout: vi.fn(() => 1), clearTimeout: vi.fn(), setInterval: vi.fn(() => 1), clearInterval: vi.fn(), dispatchEvent: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() });
   vi.stubGlobal("document", { visibilityState: "visible", addEventListener: vi.fn(), removeEventListener: vi.fn() });
   globalThis.fetch = vi.fn(async (url, init) => {
+    if (String(url).endsWith("/employee/logout")) return new Response(null, { status: 204 });
     if (!String(url).endsWith("/employee/me")) throw new Error("Fixture only allows mocked employee/me");
     const token = String((init!.headers as Record<string, string>).Authorization).replace("Bearer ", "");
     return Response.json({ employee: { name: token, email: `${token}@fixture.invalid`, role: "catalog", restaurants: [{ id: "local", name: "Fixture local" }] } });
@@ -136,6 +138,86 @@ describe("App session-scoped unauthorized handler (offline)", () => {
   });
 });
 
+describe("Explicit Partner logout revocation (offline)", () => {
+  it("clears memory and both stores before POST, uses only the old Bearer and aborts at 10s without logging tokens", async () => {
+    const tree = await login("A"); sessionStorage.setItem(tokenKey, "A");
+    localStorage.setItem("unrelated", "keep");
+    const logs = [vi.spyOn(console, "log"), vi.spyOn(console, "warn"), vi.spyOn(console, "error")];
+    let signal!: AbortSignal;
+    globalThis.fetch = vi.fn((_url, init) => {
+      expect(localStorage.getItem(tokenKey)).toBeNull(); expect(sessionStorage.getItem(tokenKey)).toBeNull();
+      expect(identityNode(renderApp())).toBeUndefined();
+      signal = init!.signal!;
+      return new Promise<Response>((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("fixture timeout"))));
+    });
+    const pending = nodes(tree).find((node) => node.props["aria-label"] === "Cerrar sesión")!.props.onClick();
+    expect(nodes(renderApp()).some((node) => node.type === EmployeeAuthGate)).toBe(true);
+    expect(localStorage.getItem("unrelated")).toBe("keep");
+    expect(fetch).toHaveBeenCalledOnce();
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(String(url)).toMatch(/\/api\/v1\/auth\/employee\/logout$/);
+    expect(init).toMatchObject({ method: "POST", cache: "no-store", headers: { Authorization: "Bearer A" } });
+    expect(init!.body).toBeUndefined(); expect(signal.aborted).toBe(false);
+    const timer = vi.mocked(window.setTimeout).mock.calls.find(([, delay]) => delay === 10_000)!;
+    expect(timer).toBeDefined(); (timer[0] as () => void)(); await pending;
+    expect(signal.aborted).toBe(true); expect(window.clearTimeout).toHaveBeenCalled();
+    for (const log of logs) { expect(log).not.toHaveBeenCalled(); log.mockRestore(); }
+  });
+
+  it.each([204, 401, 428, "network"])("ignores late logout %s after fast login B, including stale explicit handler", async (outcome) => {
+    const tree = await login("A");
+    const oldLogout = nodes(tree).find((node) => node.props["aria-label"] === "Cerrar sesión")!.props.onClick;
+    let resolve!: (response: Response) => void; let reject!: (error: Error) => void;
+    const pending = new Promise<Response>((done, fail) => { resolve = done; reject = fail; });
+    const employeeFetch = fetch;
+    globalThis.fetch = vi.fn((url, init) => String(url).endsWith("/employee/logout") ? pending : employeeFetch(url, init));
+    const logout = oldLogout();
+    expect(localStorage.getItem(tokenKey)).toBeNull(); expect(identityNode(renderApp())).toBeUndefined();
+    await login("B"); sessionStorage.setItem(tokenKey, "B");
+    await oldLogout();
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith("/logout"))).toHaveLength(1);
+    const json = vi.fn(() => { throw new Error("Logout must not parse/apply an ACK"); });
+    if (outcome === "network") reject(new Error("fixture offline"));
+    else resolve({ ok: outcome === 204, status: outcome, json } as unknown as Response);
+    await logout;
+    expect(json).not.toHaveBeenCalled();
+    expect(localStorage.getItem(tokenKey)).toBe("B"); expect(sessionStorage.getItem(tokenKey)).toBe("B");
+    expect(identityNode(renderApp())!.props.profile.fullName).toBe("B");
+  });
+
+  it("never revokes on token replacement, storage logout or operational unauthorized callbacks", async () => {
+    let tree = await login("A");
+    const storageChanged = vi.mocked(window.addEventListener).mock.calls.find(([event]) => event === "storage")![1] as unknown as (event: { key: string }) => void;
+    localStorage.setItem(tokenKey, "B"); storageChanged({ key: tokenKey });
+    renderApp(); flushParent(); await tick(); tree = renderApp();
+    nodes(tree).find((node) => node.type === MenuEditor)!.props.onUnauthorized();
+    await login("C"); localStorage.removeItem(tokenKey); storageChanged({ key: tokenKey });
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/logout"))).toBe(false);
+  });
+
+  it.each([401, 403, 428])("never revokes automatically on /me status %s", async (status) => {
+    await login("A");
+    globalThis.fetch = vi.fn(async () => Response.json({ error: "fixture" }, { status }));
+    wakeSession(); await tick();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/logout"))).toBe(false);
+  });
+
+  it.each(["MissingAssignment", "SessionRecovery"])("also revokes only when %s's explicit logout is pressed", async (screen) => {
+    if (screen === "MissingAssignment") {
+      globalThis.fetch = vi.fn(async () => Response.json({ employee: { id: "A", name: "A", role: "employee", restaurants: [] } }));
+    }
+    let tree = await login("A");
+    if (screen === "SessionRecovery") {
+      globalThis.fetch = vi.fn(async () => Response.json({ error: "fixture" }, { status: 403 }));
+      wakeSession(); await tick(); tree = renderApp();
+    }
+    globalThis.fetch = vi.fn(async () => new Response(null, { status: 204 }));
+    await nodes(tree).find((node) => node.type?.name === screen)!.props.onLogout();
+    expect(fetch).toHaveBeenCalledOnce(); expect(String(vi.mocked(fetch).mock.calls[0][0])).toMatch(/\/employee\/logout$/);
+    expect(localStorage.getItem(tokenKey)).toBeNull(); expect(identityNode(renderApp())).toBeUndefined();
+  });
+});
+
 describe("Owner portfolio App selector and consultative pending status (offline)", () => {
   it("selects all seven backend locals, disables pending reception/edits and never labels pending as accepting", async () => {
     const locations = Array.from({ length: 7 }, (_, index) => ({ id: `fixture-local-${index}`, tenantId: "fixture-tenant", name: `Offline local ${index}`, roles: ["owner"], permissions: index < 5 ? ["*"] : ["menu:read"], isOpen: index < 5, ordersEnabled: index < 5, readOnly: index >= 5, reason: index < 5 ? "open" : "not_approved" }));
@@ -161,5 +243,114 @@ describe("Owner portfolio App selector and consultative pending status (offline)
     expect(flattened).not.toContain("Aceptando pedidos");
     expect(nodes(status).find((node) => node.props?.role === "switch")?.props.disabled).toBe(true);
     expect(nodes(tree).some((node) => node.props?.role === "status")).toBe(true);
+  });
+});
+
+const identityNode = (tree: any) => nodes(tree).find((node) => node.type === PartnerAccountIdentity);
+const wakeSession = () => {
+  const callback = vi.mocked(document.addEventListener).mock.calls.find(([event]) => event === "visibilitychange")![1] as () => void;
+  callback();
+};
+
+describe("Canonical identity in Partner App (offline)", () => {
+  it("shows the complete employee identity in the header while keeping local role distinct and no extra /me", async () => {
+    const fullName = "María del Carmen Fernández Rodríguez de los Santos y de la Vega";
+    globalThis.fetch = vi.fn(async () => Response.json({ employee: { id: "employee-A", name: fullName, fullName, photoUrl: "data:image/jpeg;base64,AQID", jobRole: "Responsable de operaciones", role: "fleet_dispatch_v2", primaryRole: "admin", memberships: [{ restaurant: { id: "local", name: "Local real" }, roles: ["catalog"] }] } }));
+    let tree = await login("A");
+    const identity = identityNode(tree)!;
+    expect(identity.props.profile).toMatchObject({ fullName, photoUrl: "data:image/jpeg;base64,AQID", role: "fleet_dispatch_v2", jobRole: "Responsable de operaciones" });
+    expect(JSON.stringify(tree)).toContain("Asignación local:");
+    expect(JSON.stringify(tree)).toContain("Catálogo");
+    expect(nodes(tree).some((node) => node.type === MenuEditor)).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    identity.props.onPhotoSaved(null);
+    tree = renderApp(); flushParent(); await tick();
+    expect(identityNode(tree)!.props.profile.photoUrl).toBeNull();
+    expect(identityNode(tree)!.props.profile.role).toBe("fleet_dispatch_v2");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it("shows real identity and own-photo action even without assigned restaurants", async () => {
+    globalThis.fetch = vi.fn(async () => Response.json({ employee: { id: "unassigned", name: "Persona sin local asignado", jobRole: "Puesto real", role: "employee", photoUrl: null, restaurants: [] } }));
+    const tree = await login("A");
+    expect(identityNode(tree)!.props.profile.fullName).toBe("Persona sin local asignado");
+    expect(identityNode(tree)!.props.profile.jobRole).toBe("Puesto real");
+    expect(nodes(tree).some((node) => node.type?.name === "MissingAssignment")).toBe(true);
+    expect(nodes(tree).some((node) => node.type === MenuEditor)).toBe(false);
+  });
+  it.each(["B", "A"])("removes identity on logout and ignores old own-photo callbacks after login %s", async (nextToken) => {
+    const treeA = await login("A");
+    const identityA = identityNode(treeA)!;
+    nodes(treeA).find((node) => node.type === "button" && node.props["aria-label"] === "Cerrar sesión")!.props.onClick();
+    expect(identityNode(renderApp())).toBeUndefined();
+    const treeB = await login(nextToken);
+    expect(identityNode(treeB)!.props.identityKey).not.toBe(identityA.props.identityKey);
+    identityA.props.onPhotoSaved("data:image/jpeg;base64,AQID");
+    expect(identityNode(renderApp())!.props.profile.photoUrl).toBeNull();
+    expect(localStorage.getItem(tokenKey)).toBe(nextToken);
+  });
+  it("clears identity immediately on cross-tab token replacement and logout", async () => {
+    const treeA = await login("A");
+    const saveA = identityNode(treeA)!.props.onPhotoSaved;
+    const storageChanged = vi.mocked(window.addEventListener).mock.calls.find(([event]) => event === "storage")![1] as unknown as (event: { key: string }) => void;
+    localStorage.setItem(tokenKey, "B"); storageChanged({ key: tokenKey });
+    expect(identityNode(renderApp())).toBeUndefined();
+    saveA("data:image/jpeg;base64,AQID");
+    renderApp(); flushParent(); await tick();
+    expect(identityNode(renderApp())!.props.profile.fullName).toBe("B");
+    expect(identityNode(renderApp())!.props.profile.photoUrl).toBeNull();
+    localStorage.removeItem(tokenKey); storageChanged({ key: tokenKey });
+    expect(identityNode(renderApp())).toBeUndefined();
+    expect(nodes(renderApp()).some((node) => node.type === EmployeeAuthGate)).toBe(true);
+  });
+  it.each([401, 403, 428])("removes identity after /me auth error %s", async (status) => {
+    await login("A");
+    globalThis.fetch = vi.fn(async () => Response.json({ error: "fixture" }, { status }));
+    wakeSession(); await tick();
+    expect(identityNode(renderApp())).toBeUndefined();
+    expect(status === 403 ? localStorage.getItem(tokenKey) === "A" : localStorage.getItem(tokenKey) === null).toBe(true);
+  });
+  it("ignores late /me JSON from A after logout and account B login", async () => {
+    const treeA = await login("A");
+    let release!: (payload: unknown) => void;
+    const json = new Promise<unknown>((resolve) => { release = resolve; });
+    globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200, json: () => json }) as Response);
+    wakeSession(); await tick();
+    nodes(treeA).find((node) => node.type === "button" && node.props["aria-label"] === "Cerrar sesión")!.props.onClick();
+    globalThis.fetch = vi.fn(async () => Response.json({ employee: { id: "B", name: "Persona B", role: "catalog", restaurants: [{ id: "local", name: "Local B" }] } }));
+    await login("B");
+    release({ employee: { id: "A", name: "Persona A tardía", photoUrl: "data:image/jpeg;base64,AQID", role: "owner", restaurants: [{ id: "local", name: "Local A" }] } }); await tick();
+    expect(identityNode(renderApp())!.props.profile).toMatchObject({ id: "B", fullName: "Persona B", photoUrl: null, role: "catalog" });
+  });
+  it("shares in-flight /me validation across repeated visibility wakes", async () => {
+    await login("A");
+    let release!: (response: Response) => void;
+    const response = new Promise<Response>((resolve) => { release = resolve; });
+    globalThis.fetch = vi.fn(() => response);
+    wakeSession(); wakeSession(); wakeSession();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    release(Response.json({ employee: { name: "Persona A", role: "catalog", restaurants: [{ id: "local", name: "Local A" }] } })); await tick();
+    expect(identityNode(renderApp())!.props.profile.fullName).toBe("Persona A");
+  });
+  it("ignores old photo ACK when /me changes account with the same token", async () => {
+    const treeA = await login("A");
+    const saveA = identityNode(treeA)!.props.onPhotoSaved;
+    globalThis.fetch = vi.fn(async () => Response.json({ employee: { id: "other-account", name: "Persona cambiada", email: "other@example.invalid", role: "catalog", restaurants: [{ id: "local", name: "Local" }] } }));
+    wakeSession(); await tick();
+    expect(identityNode(treeA)!.props.isCurrentSession()).toBe(false);
+    saveA("data:image/jpeg;base64,AQID");
+    const changed = identityNode(renderApp())!;
+    expect(changed.props.profile.fullName).toBe("Persona cambiada");
+    expect(changed.props.identityKey).not.toBe(identityNode(treeA)!.props.identityKey);
+    expect(identityNode(renderApp())!.props.profile.photoUrl).toBeNull();
+  });
+  it("does not let an older /me snapshot overwrite an acknowledged own photo", async () => {
+    const tree = await login("A");
+    let release!: (payload: unknown) => void;
+    const json = new Promise<unknown>((resolve) => { release = resolve; });
+    globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200, json: () => json }) as Response);
+    wakeSession(); await tick();
+    identityNode(tree)!.props.onPhotoSaved("data:image/jpeg;base64,AQID");
+    release({ employee: { name: "A", email: "A@fixture.invalid", role: "catalog", photoUrl: null, restaurants: [{ id: "local", name: "Fixture local" }] } }); await tick();
+    expect(identityNode(renderApp())!.props.profile.photoUrl).toBe("data:image/jpeg;base64,AQID");
   });
 });
