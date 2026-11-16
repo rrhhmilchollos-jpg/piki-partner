@@ -36,7 +36,7 @@ function rememberPartnerView(view: View): void {
 const isPdaMode = location.hostname === "partners-pda.pikidelivery.com" || location.hostname.startsWith("partners-pda.");
 const navigation: Array<{ id: View; label: string; icon: typeof Bell }> = [
   { id: "orders", label: "Pedidos", icon: Bell },
-  { id: "incoming", label: "Entrantes online", icon: Inbox },
+  { id: "incoming", label: "Pedidos entrantes", icon: Inbox },
   { id: "history", label: "Historial", icon: Archive },
   { id: "catalog", label: "Carta del restaurante", icon: BookOpen },
   { id: "menu", label: "Disponibilidad", icon: PackageSearch },

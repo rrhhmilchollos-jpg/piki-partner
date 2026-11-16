@@ -7,7 +7,7 @@ import type { PikiRealtimeConnectionState } from "./realtime";
 import PrintablePartnerTicket from "./PrintablePartnerTicket";
 import { visibleOrderReference } from "./orderReference";
 import { usePartnerKitchenReception } from "./PartnerKitchenReception";
-import { incomingOnlinePartnerOrders } from "./partnerIncomingOrders";
+import { incomingPartnerOrders } from "./partnerIncomingOrders";
 import SunmiPdaBoard from "./SunmiPdaBoard";
 import { printOrderToSunmi } from "./sunmiPrinter";
 import { canTransitionPartnerOrder, partnerOrderCountdown, partnerOrderDeadline } from "./partnerOrderPolicy";
@@ -132,8 +132,8 @@ export default function OrdersBoard({
   const [preparationMinutesByOrder, setPreparationMinutesByOrder] = useState<Record<string, number>>({});
   const transitionLockRef = useRef<string | null>(null);
   const { orders, loading, receptionMessage, realtimeState, now, load, applyConfirmedOrder, activeCount, audioReady, prepareAudio, resolveOrder, notifyCancelledOrder } = usePartnerKitchenReception();
-  const ordersForView = useMemo(() => incomingOnly ? incomingOnlinePartnerOrders(orders) : orders, [incomingOnly, orders]);
-  const onlinePendingCount = ordersForView.filter((order) => order.status === "pending").length;
+  const ordersForView = useMemo(() => incomingOnly ? incomingPartnerOrders(orders) : orders, [incomingOnly, orders]);
+  const incomingCount = ordersForView.filter((order) => order.status === "pending").length;
   const message = [receptionMessage, operationMessage].filter(Boolean).join(" · ");
   const headers = useMemo(() => partnerHeaders(token, locationId), [token, locationId]);
   const canMove = (status: string) => canRead && canTransitionPartnerOrder(status, { canAccept, canPrepare, canCancel });
@@ -232,7 +232,7 @@ export default function OrdersBoard({
     busy={Boolean(busyOrderId)}
     canAccept={canRead && canAccept}
     canPrepare={canRead && canPrepare}
-    activeCount={incomingOnly ? onlinePendingCount : activeCount}
+    activeCount={incomingOnly ? incomingCount : activeCount}
     audioReady={audioReady}
     realtimeState={realtimeState}
     connectionLabel={connectionLabel}
@@ -243,29 +243,29 @@ export default function OrdersBoard({
     onPrint={() => { if (pdaOrder) void printOrder(pdaOrder); }}
     onEnableAudio={() => { void prepareAudio(); }}
   />;
-  return <section className={`orders-workspace ${pdaMode ? "pda-orders-workspace" : ""}`} aria-label={incomingOnly ? "Pedidos entrantes en línea" : pdaMode ? "PDA operativa PIKI Partner" : "Pedidos PIKI Partner Orders"}>
+  return <section className={`orders-workspace ${pdaMode ? "pda-orders-workspace" : ""}`} aria-label={incomingOnly ? "Comandero de pedidos entrantes" : pdaMode ? "PDA operativa PIKI Partner" : "Pedidos PIKI Partner Orders"}>
     <header className="orders-heading">
       <div>
         <p className="section-kicker">{pdaMode ? "PDA · OPERACIÓN EN VIVO" : "OPERACIÓN EN VIVO"}</p>
-        <h1>{incomingOnly ? "Pedidos entrantes en línea" : pdaMode ? "Pedidos del establecimiento" : "Pedidos"}</h1>
-        <p>{incomingOnly ? "Pedidos online con pago confirmado, pendientes de aceptar por el establecimiento." : pdaMode ? "Acepta, prepara y entrega cada pedido desde una sola pantalla." : "Gestiona cada comanda sin perder el ritmo del local."}</p>
+        <h1>{incomingOnly ? "Pedidos entrantes" : pdaMode ? "Pedidos del establecimiento" : "Pedidos"}</h1>
+        <p>{incomingOnly ? "Comandas nuevas pendientes de aceptar por el establecimiento." : pdaMode ? "Acepta, prepara y entrega cada pedido desde una sola pantalla." : "Gestiona cada comanda sin perder el ritmo del local."}</p>
       </div>
-      <div className="orders-heading-actions"><button type="button" className="support-trigger" onClick={() => setSupportOpen((current) => !current)}><MessageSquare size={16} /> {supportOpen ? "Cerrar soporte" : "Contactar con soporte"}</button><div className={`connection-status ${isRealtimeConnected ? "is-live" : ""} is-${realtimeState.status}`} aria-live="polite">
+      <div className="orders-heading-actions">{!incomingOnly && <button type="button" className="support-trigger" onClick={() => setSupportOpen((current) => !current)}><MessageSquare size={16} /> {supportOpen ? "Cerrar soporte" : "Contactar con soporte"}</button>}<div className={`connection-status ${isRealtimeConnected ? "is-live" : ""} is-${realtimeState.status}`} aria-live="polite">
         {isRealtimeConnected ? <Wifi size={16} /> : realtimeState.status === "reconnecting" ? <RefreshCw className="connection-retrying" size={16} /> : <WifiOff size={16} />}
         <span>{connectionLabel}</span>
         <button type="button" className="icon-control" onClick={() => void load()} aria-label="Actualizar pedidos"><RefreshCw size={17} /></button>
       </div></div>
     </header>
 
-    <div className="partner-operation-strip"><div><span className="operation-dot" /> <strong>{incomingOnly ? "Entrantes online" : "Operación activa"}</strong><small>{counts.pending ? `${counts.pending} ${counts.pending === 1 ? "pedido pendiente de aceptación" : "pedidos pendientes de aceptación"}` : incomingOnly ? "Esperando pedidos online con el pago confirmado" : "Los pedidos nuevos aparecen aquí automáticamente"}</small></div><strong>{counts.all} {counts.all === 1 ? "pedido activo" : "pedidos activos"}</strong></div>
+    <div className="partner-operation-strip"><div><span className="operation-dot" /> <strong>{incomingOnly ? "Comandas entrantes" : "Operación activa"}</strong><small>{counts.pending ? `${counts.pending} ${counts.pending === 1 ? "pedido pendiente de aceptación" : "pedidos pendientes de aceptación"}` : incomingOnly ? "Esperando nuevos pedidos del local" : "Los pedidos nuevos aparecen aquí automáticamente"}</small></div><strong>{counts.all} {counts.all === 1 ? "pedido activo" : "pedidos activos"}</strong></div>
     {!incomingOnly && <div className="order-filter-tabs" role="tablist" aria-label="Filtrar pedidos">{(Object.keys(filterLabels) as OrderFilter[]).map((filter) => <button key={filter} type="button" role="tab" aria-selected={activeFilter === filter} className={activeFilter === filter ? "is-active" : ""} onClick={() => setActiveFilter(filter)}>{filterLabels[filter]}<span>{counts[filter]}</span></button>)}</div>}
-    <PartnerOrderAlarmBanner count={incomingOnly ? onlinePendingCount : activeCount} audioReady={audioReady} onEnableAudio={() => { void prepareAudio(); }} />
-    {message && <p className="orders-message" role="status"><CircleAlert size={17} />{message}</p>}{supportOpen && <form className="partner-support-panel" onSubmit={(event) => void submitSupportTicket(event)}><div><p className="section-kicker">SOPORTE OPERATIVO</p><h2>Enviar incidencia a PIKI Support</h2><p>El equipo recibirá el local, tu cuenta y el pedido seleccionado.</p></div><label>Pedido afectado (opcional)<select value={supportForm.orderId} onChange={(event) => setSupportForm((current) => ({ ...current, orderId: event.target.value }))}><option value="">Sin pedido concreto</option>{orders.map((order) => <option key={order._id} value={order._id}>{visibleOrderReference(order.publicCode, order._id)} · {order.status}</option>)}</select></label><label>Prioridad<select value={supportForm.priority} onChange={(event) => setSupportForm((current) => ({ ...current, priority: event.target.value }))}><option value="normal">Normal</option><option value="high">Alta</option><option value="urgent">Urgente</option></select></label><label>Asunto<input required minLength={3} maxLength={180} value={supportForm.subject} onChange={(event) => setSupportForm((current) => ({ ...current, subject: event.target.value }))} placeholder="Ej. El rider no aparece en el local" /></label><label>Qué ha ocurrido<textarea required minLength={3} maxLength={4000} rows={4} value={supportForm.description} onChange={(event) => setSupportForm((current) => ({ ...current, description: event.target.value }))} placeholder="Incluye los datos operativos necesarios." /></label><button type="submit" className="support-submit" disabled={supportBusy}><Send size={15} />{supportBusy ? "Enviando…" : "Enviar a soporte"}</button></form>}
+    <PartnerOrderAlarmBanner count={incomingOnly ? incomingCount : activeCount} audioReady={audioReady} onEnableAudio={() => { void prepareAudio(); }} />
+    {message && <p className="orders-message" role="status"><CircleAlert size={17} />{message}</p>}{!incomingOnly && supportOpen && <form className="partner-support-panel" onSubmit={(event) => void submitSupportTicket(event)}><div><p className="section-kicker">SOPORTE OPERATIVO</p><h2>Enviar incidencia a PIKI Support</h2><p>El equipo recibirá el local, tu cuenta y el pedido seleccionado.</p></div><label>Pedido afectado (opcional)<select value={supportForm.orderId} onChange={(event) => setSupportForm((current) => ({ ...current, orderId: event.target.value }))}><option value="">Sin pedido concreto</option>{orders.map((order) => <option key={order._id} value={order._id}>{visibleOrderReference(order.publicCode, order._id)} · {order.status}</option>)}</select></label><label>Prioridad<select value={supportForm.priority} onChange={(event) => setSupportForm((current) => ({ ...current, priority: event.target.value }))}><option value="normal">Normal</option><option value="high">Alta</option><option value="urgent">Urgente</option></select></label><label>Asunto<input required minLength={3} maxLength={180} value={supportForm.subject} onChange={(event) => setSupportForm((current) => ({ ...current, subject: event.target.value }))} placeholder="Ej. El rider no aparece en el local" /></label><label>Qué ha ocurrido<textarea required minLength={3} maxLength={4000} rows={4} value={supportForm.description} onChange={(event) => setSupportForm((current) => ({ ...current, description: event.target.value }))} placeholder="Incluye los datos operativos necesarios." /></label><button type="submit" className="support-submit" disabled={supportBusy}><Send size={15} />{supportBusy ? "Enviando…" : "Enviar a soporte"}</button></form>}
 
     <div className="orders-summary" aria-label="Resumen de pedidos">
-      <div><span>{incomingOnly ? "Pedidos online pendientes" : "Pedidos activos"}</span><strong>{ordersForView.filter((order) => lanes.some((lane) => lane.status === order.status)).length}</strong></div>
-      <div><span>{incomingOnly ? "Confirmados para aceptar" : "Nuevos por aceptar"}</span><strong>{ordersForView.filter((order) => order.status === "pending").length}</strong></div>
-      <div><span>Alarma</span><strong>{activeCount ? `${activeCount} activa` : "Sin alertas"}</strong></div>
+      <div><span>{incomingOnly ? "Comandas entrantes" : "Pedidos activos"}</span><strong>{ordersForView.filter((order) => lanes.some((lane) => lane.status === order.status)).length}</strong></div>
+      <div><span>{incomingOnly ? "Listos para aceptar" : "Nuevos por aceptar"}</span><strong>{ordersForView.filter((order) => order.status === "pending").length}</strong></div>
+      <div><span>Alarma</span><strong>{(incomingOnly ? incomingCount : activeCount) ? `${incomingOnly ? incomingCount : activeCount} activa` : "Sin alertas"}</strong></div>
     </div>
 
     {loading ? <div className="orders-loading">Cargando operación…</div> : <div className="orders-board">
@@ -282,7 +282,7 @@ export default function OrdersBoard({
               <ul className="order-items">{(order.items ?? []).map((item, index) => <li key={`${order._id}-${index}`}><b>{item.quantity ?? 1}×</b><span><strong>{item.name || "Producto"}</strong>{item.selectedOptions?.length ? <small>{item.selectedOptions.map((option) => option.optionName).filter(Boolean).join(" · ")}</small> : null}</span></li>)}</ul>
               {order.deliveryNote?.trim() && <div className="sunmi-special-alert order-special-note" role="note"><CircleAlert size={20} /><span><strong>NOTA DEL PEDIDO</strong><small>{order.deliveryNote.trim()}</small></span></div>}
               {order.deliveryAddress && <p className="order-address"><span>Entrega</span>{order.deliveryAddress}</p>}
-              <div className="order-meta"><span>{isCashOrder(order) ? "Contra reembolso" : "Pago online"}</span><strong>{money(order.totalCents)}</strong></div>
+              {!incomingOnly && <div className="order-meta"><span>{isCashOrder(order) ? "Contra reembolso" : "Pago online"}</span><strong>{money(order.totalCents)}</strong></div>}
               {order.riderTracking && <div className="rider-tracking-card">
                 <div className="rider-tracking-heading"><span><MapPinned size={16} /> Seguimiento del Rider</span><small className={order.riderTracking.fresh ? "tracking-live" : "tracking-stale"}>{order.riderTracking.fresh ? "En directo" : "Esperando GPS"}</small></div>
                 <p><b>{order.riderTracking.name || "Rider PIKI"}</b> · {vehicleLabel(order.riderTracking.vehicle)} · {order.riderTracking.status || "disponible"}</p>
@@ -301,7 +301,7 @@ export default function OrdersBoard({
               </div>
               {canCancel && ["pending", "accepted", "preparing"].includes(lane.status) && <button type="button" className="incident-control" disabled={Boolean(busyOrderId)} onClick={() => cancelOrder(order)}><XCircle size={15} /> Cancelar pedido</button>}
             </article>)}
-            {!laneOrders.length && <div className="lane-empty"><BellRing size={19} /><span>{incomingOnly ? lane.status === "pending" ? "No hay pedidos online pendientes de aceptar" : "Los pedidos aceptados continúan en Pedidos" : activeFilter !== "all" ? `No hay pedidos ${filterLabels[activeFilter].toLowerCase()}` : lane.status === "pending" ? "Sin pedidos nuevos" : "Nada por hacer aquí"}</span></div>}
+            {!laneOrders.length && <div className="lane-empty"><BellRing size={19} /><span>{incomingOnly ? "No hay pedidos pendientes de aceptar" : activeFilter !== "all" ? `No hay pedidos ${filterLabels[activeFilter].toLowerCase()}` : lane.status === "pending" ? "Sin pedidos nuevos" : "Nada por hacer aquí"}</span></div>}
           </div>
         </section>;
       })}
