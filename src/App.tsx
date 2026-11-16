@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Archive, BarChart3, Bell, BookOpen, ChevronDown, CircleHelp, Clock3, LogOut, Menu, PackageSearch, Phone, Store, X } from "lucide-react";
+import { Archive, BarChart3, Bell, BookOpen, ChevronDown, CircleHelp, Clock3, Inbox, LogOut, Menu, PackageSearch, Phone, Store, X } from "lucide-react";
 import "./App.css";
 import "./partnerSafety.css";
 import CookieConsent from "./components/CookieConsent";
@@ -25,9 +25,18 @@ import PartnerAccountIdentity from "./PartnerAccountIdentity";
 
 type View = PartnerView;
 const tokenKey = `piki-${location.hostname}-api-token`;
+const partnerActiveViewKey = `${tokenKey}-active-view`;
+function storedPartnerView(): View {
+  const value = sessionStorage.getItem(partnerActiveViewKey);
+  return value && ["orders", "incoming", "history", "catalog", "menu", "performance", "settings"].includes(value) ? value as View : "orders";
+}
+function rememberPartnerView(view: View): void {
+  try { sessionStorage.setItem(partnerActiveViewKey, view); } catch { /* Navigation still works if storage is unavailable. */ }
+}
 const isPdaMode = location.hostname === "partners-pda.pikidelivery.com" || location.hostname.startsWith("partners-pda.");
 const navigation: Array<{ id: View; label: string; icon: typeof Bell }> = [
   { id: "orders", label: "Pedidos", icon: Bell },
+  { id: "incoming", label: "Entrantes online", icon: Inbox },
   { id: "history", label: "Historial", icon: Archive },
   { id: "catalog", label: "Carta del restaurante", icon: BookOpen },
   { id: "menu", label: "Disponibilidad", icon: PackageSearch },
@@ -173,8 +182,10 @@ function PartnerOperationsApp() {
   const [checkingSession, setCheckingSession] = useState(Boolean(token));
   const [sessionIssue, setSessionIssue] = useState("");
   const [sessionRetry, setSessionRetry] = useState(0);
-  const [activeView, setActiveView] = useState<View>("orders");
+  const [activeView, setActiveView] = useState<View>(storedPartnerView);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => { rememberPartnerView(activeView); }, [activeView]);
 
   const isCurrentSession = useCallback(() => currentSession.current.token === token && currentSession.current.epoch === sessionEpoch, [token, sessionEpoch]);
   const clearSession = useCallback(() => {
@@ -192,6 +203,8 @@ function PartnerOperationsApp() {
     setActiveLocationId("");
     setCheckingSession(false);
     setSessionIssue("");
+    setActiveView("orders");
+    sessionStorage.removeItem(partnerActiveViewKey);
     setMenuOpen(false);
   }, [isCurrentSession]);
 
@@ -219,6 +232,8 @@ function PartnerOperationsApp() {
     setProfile(null);
     setActiveLocationId("");
     setSessionIssue("");
+    setActiveView("orders");
+    rememberPartnerView("orders");
     setMenuOpen(false);
     setActiveView("orders");
     setToken(nextToken);
@@ -335,7 +350,7 @@ function PartnerOperationsApp() {
         <span className="partner-establishment-icon"><Store size={18} /></span>
         <div><small>ESTABLECIMIENTO ACTIVO</small><strong>{location.name}</strong><span>{location.partnerCode || location.address || "Panel operativo del Partner"}</span><span className="partner-local-roles">Asignación local: {location.roles.length ? location.roles.map(displayRole).join(" · ") : "No informada"}</span></div>
       </div>
-      <nav>{availableNavigation.map(({ id, label, icon: Icon }) => <button type="button" key={id} className={currentView === id ? "active" : ""} onClick={() => { setActiveView(id); setMenuOpen(false); }}><Icon size={20} /><span>{label}</span></button>)}</nav>
+      <nav>{availableNavigation.map(({ id, label, icon: Icon }) => <button type="button" key={id} className={currentView === id ? "active" : ""} onClick={() => { setActiveView(id); rememberPartnerView(id); setMenuOpen(false); }}><Icon size={20} /><span>{label}</span></button>)}</nav>
       <a className="sidebar-help" href="tel:+34960500685" aria-label="Llamar a Soporte PIKI al 960 500 685"><CircleHelp size={18} /><span><b>Soporte PIKI</b><small>Preparación y reparto · 960 500 685</small></span><Phone size={15} /></a>
     </aside>
     {menuOpen && <button type="button" className="sidebar-scrim" aria-label="Cerrar menú" onClick={() => setMenuOpen(false)} />}
@@ -351,7 +366,7 @@ function PartnerOperationsApp() {
         {canOrdersRead && <PartnerNativeNotificationControl />}
         {location.readOnly && <div className="orders-loading" role="status">Local en consulta, no operativo. La aprobación comercial, disponibilidad y carta deben estar confirmadas antes de recibir pedidos.</div>}
         {!currentView && <div className="orders-loading">Este perfil no tiene permisos operativos para el local seleccionado. Contacta con el administrador de tu cuenta PIKI.</div>}
-        {currentView === "orders" && <OrdersBoard token={token} locationId={location.id} canRead={canOrdersRead} canAccept={canAccept} canPrepare={canPrepare} canCancel={canCancel} pdaMode={isPdaMode} onUnauthorized={clearSession} />}
+        {(currentView === "orders" || currentView === "incoming") && <OrdersBoard key={currentView} token={token} locationId={location.id} canRead={canOrdersRead} canAccept={canAccept} canPrepare={canPrepare} canCancel={canCancel} pdaMode={isPdaMode} incomingOnly={currentView === "incoming"} onUnauthorized={clearSession} />}
         {currentView === "history" && <ArchivedOrdersBoard token={token} locationId={location.id} canRead={canOrdersRead} onUnauthorized={clearSession} />}
         {currentView === "catalog" && canMenu && <MenuEditor key={location.id} apiOrigin={apiOrigin} token={token} locationId={location.id} identityKey={`${profile.tenant || ""}:${profile.email}:${location.tenant || ""}`} onUnauthorized={clearSession} />}
         {currentView === "menu" && <MenuAvailability key={location.id} token={token} locationId={location.id} identityKey={`${profile.tenant || ""}:${profile.email}:${location.tenant || ""}`} canRead={canMenuRead} canEdit={canMenu} onUnauthorized={clearSession} />}
