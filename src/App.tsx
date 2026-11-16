@@ -12,7 +12,7 @@ import PerformanceView from "./PerformanceView";
 import PartnerOnboarding from "./PartnerOnboarding";
 import GoogleBusinessSettings from "./GoogleBusinessSettings";
 import PartnerAccountSummary from "./PartnerAccountSummary";
-import { apiOrigin, displayRole, hasPermission, normalisePartnerProfile, partnerHeaders, type PartnerLocation, type PartnerProfile } from "./partnerApi";
+import { apiOrigin, displayRole, hasDeclaredPermission, hasPermission, normalisePartnerProfile, partnerHeaders, type PartnerLocation, type PartnerProfile } from "./partnerApi";
 import { visiblePartnerViews, type PartnerView } from "./partnerNavigation";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
 import { partnerSessionIssue, shouldClearPartnerSession } from "./sessionRecovery";
@@ -327,6 +327,7 @@ function PartnerOperationsApp() {
   const location = profile.locations.find((item) => item.id === activeLocationId) ?? profile.locations[0];
   const canStore = hasPermission(location, "store:write");
   const canOrdersRead = hasPermission(location, "orders:read");
+  const canSeeOrders = hasDeclaredPermission(location, "orders:read");
   const canAccept = hasPermission(location, "orders:write");
   const canPrepare = hasPermission(location, "orders:prepare");
   const canCancel = hasPermission(location, "orders:cancel");
@@ -334,7 +335,7 @@ function PartnerOperationsApp() {
   const canMenu = hasPermission(location, "menu:write");
   const canMetrics = hasPermission(location, "metrics:read");
   const visibleViews = new Set(visiblePartnerViews({
-    ordersRead: canOrdersRead,
+    ordersRead: canSeeOrders,
     menuRead: canMenuRead,
     menuWrite: canMenu,
     metricsRead: canMetrics,
@@ -366,7 +367,7 @@ function PartnerOperationsApp() {
         {canOrdersRead && <PartnerNativeNotificationControl />}
         {location.readOnly && <div className="orders-loading" role="status">Local en consulta, no operativo. La aprobación comercial, disponibilidad y carta deben estar confirmadas antes de recibir pedidos.</div>}
         {!currentView && <div className="orders-loading">Este perfil no tiene permisos operativos para el local seleccionado. Contacta con el administrador de tu cuenta PIKI.</div>}
-        {(currentView === "orders" || currentView === "incoming") && <OrdersBoard key={currentView} token={token} locationId={location.id} canRead={canOrdersRead} canAccept={canAccept} canPrepare={canPrepare} canCancel={canCancel} pdaMode={isPdaMode} incomingOnly={currentView === "incoming"} onUnauthorized={clearSession} />}
+        {(currentView === "orders" || currentView === "incoming") && <OrdersBoard key={currentView} token={token} locationId={location.id} canRead={canOrdersRead} ordersEnabled={location.ordersEnabled !== false && location.readOnly !== true} readinessReason={location.reason} canAccept={canAccept} canPrepare={canPrepare} canCancel={canCancel} pdaMode={isPdaMode} incomingOnly={currentView === "incoming"} onUnauthorized={clearSession} />}
         {currentView === "history" && <ArchivedOrdersBoard token={token} locationId={location.id} canRead={canOrdersRead} onUnauthorized={clearSession} />}
         {currentView === "catalog" && canMenu && <MenuEditor key={location.id} apiOrigin={apiOrigin} token={token} locationId={location.id} identityKey={`${profile.tenant || ""}:${profile.email}:${location.tenant || ""}`} onUnauthorized={clearSession} />}
         {currentView === "menu" && <MenuAvailability key={location.id} token={token} locationId={location.id} identityKey={`${profile.tenant || ""}:${profile.email}:${location.tenant || ""}`} canRead={canMenuRead} canEdit={canMenu} onUnauthorized={clearSession} />}

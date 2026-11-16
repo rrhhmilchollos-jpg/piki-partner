@@ -48,3 +48,7 @@ Evidencia final: 273/273 tests Vitest (59 nuevos de onboarding), check-only prev
 - [x] Verificar render/helpers y sesiones con mocks offline: nombre largo, rol/puesto reales distintos de superficie/local, foto ausente/rota, compresión y ACK, cambio sesión, errores auth y respuestas tardías. Solo partner en rama `feat/account-identity-20261113`: pnpm install frozen prefer-offline, check/tests existentes; sin API/otras apps, navegador, producción, versión/build de release, commit/push/deploy/merge.
 
 Evidencia: `pnpm install --frozen-lockfile --prefer-offline` sin modificar lockfile; `pnpm check` aprobado; `pnpm test` 350/350 tests, 22 archivos con guard offline y sin .env; `pnpm lint` 0 warnings/errores; `git diff --check` aprobado. Nombre/puesto/rol, ausencia/rotura de foto, encoding y límites, ACK/204/rechazo, sesiones/cuentas y peticiones tardías cubiertos con mocks y render estático. Sin compilación de release, servicios ni acciones Android. Integración real pendiente del contrato de API central gestionado por otro agente. Warning preexistente de Vite por import sin extensión en vitest.config.ts, no bloqueante.
+
+## Pedidos entrantes visibles · 16/11/2026
+- [x] Mostrar «Pedidos» y «Pedidos entrantes» a perfiles que tienen `orders:read` declarado aunque el local esté pausado, pendiente de aprobación o aún no sea orderable.
+- [x] Mantener bloqueadas la lectura REST y las acciones de aceptar/preparar hasta que el backend confirme que el local está operativo; explicar el motivo en la pantalla en lugar de ocultar el módulo.

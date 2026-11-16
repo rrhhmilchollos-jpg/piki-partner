@@ -293,6 +293,12 @@ export function hasPermission(location: PartnerLocation | null | undefined, perm
   return false;
 }
 
+/** Visibility is separate from operation readiness: the team can see the workspace while a local is paused or pending approval. */
+export function hasDeclaredPermission(location: PartnerLocation | null | undefined, permission: string): boolean {
+  if (!location) return false;
+  return location.permissions.includes("*") || location.permissions.includes(permission);
+}
+
 export function partnerHeaders(token: string, locationId?: string): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,

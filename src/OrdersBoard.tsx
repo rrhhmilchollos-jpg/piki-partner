@@ -105,6 +105,8 @@ export default function OrdersBoard({
   token,
   locationId,
   canRead,
+  ordersEnabled = true,
+  readinessReason,
   canAccept,
   canPrepare,
   canCancel,
@@ -115,6 +117,8 @@ export default function OrdersBoard({
   token: string;
   locationId?: string;
   canRead: boolean;
+  ordersEnabled?: boolean;
+  readinessReason?: string;
   canAccept: boolean;
   canPrepare: boolean;
   canCancel: boolean;
@@ -243,6 +247,10 @@ export default function OrdersBoard({
     onPrint={() => { if (pdaOrder) void printOrder(pdaOrder); }}
     onEnableAudio={() => { void prepareAudio(); }}
   />;
+  if (!canRead) return <section className="orders-workspace orders-access-workspace" aria-label={incomingOnly ? "Pedidos entrantes" : "Pedidos PIKI Partner Orders"}>
+    <header className="orders-heading"><div><p className="section-kicker">OPERACIÓN DE PARTNER</p><h1>{incomingOnly ? "Pedidos entrantes" : "Pedidos"}</h1><p>El espacio de pedidos queda visible para tu equipo, aunque el local todavía no esté operativo.</p></div><div className="connection-status is-offline"><WifiOff size={16} /><span>Recepción pausada</span></div></header>
+    <div className="orders-access-panel" role="status"><div className="orders-access-icon"><CircleAlert size={22} /></div><div><strong>{ordersEnabled ? "Falta autorización para leer pedidos" : "El local aún no puede recibir pedidos"}</strong><p>{ordersEnabled ? "Tu cuenta tiene acceso al espacio, pero el API no ha confirmado el permiso operativo orders:read." : readinessReason === "not_approved" ? "La ficha comercial está pendiente de aprobación. Cuando PIKI la active, aquí aparecerán los pedidos nuevos automáticamente." : "Activa el local y completa la puesta en marcha de carta y disponibilidad para empezar a recibir comandas."}</p></div></div>
+  </section>;
   return <section className={`orders-workspace ${pdaMode ? "pda-orders-workspace" : ""}`} aria-label={incomingOnly ? "Comandero de pedidos entrantes" : pdaMode ? "PDA operativa PIKI Partner" : "Pedidos PIKI Partner Orders"}>
     <header className="orders-heading">
       <div>
