@@ -124,6 +124,7 @@ html, body, #root { max-width: 100%; overflow-x: hidden; }
   .piki-thermal-ticket li > span { display: grid !important; min-width: 0 !important; }
   .piki-thermal-ticket li small { font-size: 8px !important; }
   .piki-thermal-ticket .thermal-pickup-label { margin: 0 !important; text-align: center !important; font-size: 8px !important; font-weight: 700 !important; }
+  .piki-thermal-ticket .thermal-qr { display: block !important; width: 30mm !important; height: 30mm !important; object-fit: contain !important; margin: 5px auto !important; image-rendering: pixelated !important; }
   .piki-thermal-ticket .thermal-help { margin: 0 !important; text-align: center !important; font-size: 8px !important; }
   .piki-thermal-ticket footer { margin-top: 10px !important; text-align: center !important; font-size: 8px !important; }
 }

@@ -18,17 +18,11 @@ export type PrintablePartnerOrder = {
   paymentMethod?: string;
   paymentState?: string;
   cashDueAtDelivery?: boolean;
+  pickupQrUrl?: string | null;
+  pickupPin?: string | null;
+  estimatedReadyAt?: string | null;
   restaurant?: { name?: string; address?: string; phone?: string } | null;
   customer?: { name?: string } | null;
-};
-
-const statusLabels: Record<string, string> = {
-  pending: "Nuevo",
-  accepted: "Aceptado",
-  preparing: "En preparación",
-  ready_for_pickup: "Listo para recoger",
-  picked_up: "Recogido por el Rider",
-  on_the_way: "En ruta al cliente",
 };
 
 function isCashOrder(order: PrintablePartnerOrder) {
@@ -36,21 +30,23 @@ function isCashOrder(order: PrintablePartnerOrder) {
 }
 
 export default function PrintablePartnerTicket({ order }: { order: PrintablePartnerOrder }) {
+  const itemCount = (order.items || []).reduce((total, item) => total + (item.quantity || 1), 0);
   return <div className="piki-thermal-ticket" aria-hidden="true">
     <header>
-      <strong>{order.restaurant?.name || "ESTABLECIMIENTO PARTNER"}</strong>
-      <span>TICKET OFICIAL DE PEDIDO · PIKI DELIVERY</span>
+      <strong>PIKI #{order.publicCode || order._id}</strong>
+      <span>{order.restaurant?.name || "ESTABLECIMIENTO PARTNER"}</span>
       {order.restaurant?.address && <span>{order.restaurant.address}</span>}
-      {order.restaurant?.phone && <span>{order.restaurant.phone}</span>}
-    </header>
-    <div className="thermal-rule" />
-    <section className="thermal-order-id">
-      <b>#{order.publicCode || order._id}</b>
       <span>{new Date(order.createdAt).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}</span>
-    </section>
-    <p className="thermal-status">{statusLabels[order.status] || order.status}</p>
+    </header>
+    <p className="thermal-help">Referencia: {order._id}</p>
+    <div className="thermal-rule" />
+    {order.pickupQrUrl && <><p className="thermal-pickup-label">RIDER PICKUP CODE</p><img className="thermal-qr" src={order.pickupQrUrl} alt="Código QR de recogida" /></>}
+    {order.pickupPin && <p className="thermal-pickup-label">PIN: {order.pickupPin}</p>}
+    {(order.pickupQrUrl || order.pickupPin) && <div className="thermal-rule" />}
     <p className="thermal-line"><span>Cliente</span><b>{order.customer?.name || "Cliente PIKI"}</b></p>
-    <p className="thermal-line"><span>Dirección</span><b>{order.deliveryAddress || "—"}</b></p>
+    <p className="thermal-line"><span>Pago</span><b>{isCashOrder(order) ? "CONTRARREEMBOLSO" : order.paymentState === "authorized" ? "PREPAGO · ONLINE · AUTORIZADO" : order.paymentState === "paid" ? "PREPAGO" : "PAGO ONLINE"}</b></p>
+    {order.estimatedReadyAt && <p className="thermal-line"><span>Listo estimado</span><b>{new Date(order.estimatedReadyAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</b></p>}
+    <p className="thermal-line"><span>Artículos</span><b>{itemCount}</b></p>
     {order.deliveryNote?.trim() && <p className="thermal-note"><strong>NOTA DEL PEDIDO</strong><br />{order.deliveryNote.trim()}</p>}
     <div className="thermal-rule" />
     <ul>
@@ -66,7 +62,7 @@ export default function PrintablePartnerTicket({ order }: { order: PrintablePart
       })}
     </ul>
     <div className="thermal-rule" />
-    <p className="thermal-line"><span>Pago</span><b>{isCashOrder(order) ? "EFECTIVO · cobra Rider" : order.paymentState === "authorized" ? "ONLINE · AUTORIZADO" : order.paymentState === "paid" ? "PAGADO ONLINE" : "PAGO ONLINE"}</b></p>
+    <p className="thermal-line"><span>Subtotal</span><b>{(Number(order.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}</b></p>
     <p className="thermal-line"><span>Total</span><b>{(Number(order.totalCents || 0) / 100).toLocaleString("es-ES", { style: "currency", currency: "EUR" })}</b></p>
     <footer>Gracias por colaborar con PIKI<br />partners.pikidelivery.com</footer>
   </div>;
