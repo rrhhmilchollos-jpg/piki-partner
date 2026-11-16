@@ -18,24 +18,30 @@ public class SunmiPrinterPlugin extends Plugin {
     private SunmiPrinterService printerService;
     private InnerPrinterCallback printerCallback;
 
-    @Override
-    public void load() {
-        printerCallback = new InnerPrinterCallback() {
-            @Override
-            protected void onConnected(SunmiPrinterService service) {
-                printerService = service;
-            }
+    private void bindPrinterService() {
+        if (printerCallback == null) {
+            printerCallback = new InnerPrinterCallback() {
+                @Override
+                protected void onConnected(SunmiPrinterService service) {
+                    printerService = service;
+                }
 
-            @Override
-            protected void onDisconnected() {
-                printerService = null;
-            }
-        };
+                @Override
+                protected void onDisconnected() {
+                    printerService = null;
+                }
+            };
+        }
         try {
             InnerPrinterManager.getInstance().bindService(getContext(), printerCallback);
         } catch (Exception ignored) {
             printerService = null;
         }
+    }
+
+    @Override
+    public void load() {
+        bindPrinterService();
     }
 
     @Override
@@ -86,6 +92,7 @@ public class SunmiPrinterPlugin extends Plugin {
             call.reject("El ticket está vacío");
             return;
         }
+        if (printerService == null) bindPrinterService();
         if (printerService == null) {
             call.reject("No se ha conectado la impresora SUNMI");
             return;
