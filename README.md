@@ -46,3 +46,10 @@ pnpm test
 ## Despliegue
 
 Vercel ejecuta `pnpm install --frozen-lockfile` y `pnpm run build` con cada push a `main`. El build actualiza los metadatos de versión y el service worker antes de crear `dist`.
+
+## Producción en PDA SUNMI
+
+- [Manual de Android Enterprise, Intune, cuentas, DNS y modo quiosco](docs/pda-production-runbook.md)
+- [Manual de firma y generación del APK/AAB](docs/android-release-runbook.md)
+
+La URL PDA es `https://partners-pda.pikidelivery.com`. El modo PDA se activa por hostname; el bloqueo real del dispositivo lo aplica Android Enterprise/Intune, no la interfaz web por sí sola.
