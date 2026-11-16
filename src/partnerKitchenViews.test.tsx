@@ -45,4 +45,21 @@ describe("Partner note and action views", () => {
     const html = renderToStaticMarkup(<PrintablePartnerTicket order={{ ...order, deliveryNote: "   " }} />);
     expect(html).not.toContain("NOTA DEL PEDIDO");
   });
+  it("shows the payment-agnostic incoming command queue without payment details", () => {
+    reception.orders = [
+      { ...order, _id: "online-incoming", status: "pending", paymentMethod: "stripe", paymentState: "authorized", items: [{ name: "ONLINE PRODUCT", quantity: 1 }] },
+      { ...order, _id: "cash-incoming", status: "pending", paymentMethod: "cash", paymentState: "pending", cashDueAtDelivery: true, items: [{ name: "CASH PRODUCT", quantity: 1 }] },
+      { ...order, _id: "unpaid-incoming", status: "pending", paymentMethod: "stripe", paymentState: "pending", items: [{ name: "UNPAID PRODUCT", quantity: 1 }] },
+      { ...order, _id: "online-already-accepted", status: "accepted", paymentMethod: "bizum", paymentState: "paid", items: [{ name: "ACCEPTED PRODUCT", quantity: 1 }] },
+    ];
+    const html = renderToStaticMarkup(<OrdersBoard token="fixture" locationId="local" canRead canAccept canPrepare canCancel incomingOnly onUnauthorized={() => undefined} />);
+    expect(html).toContain("Pedidos entrantes");
+    expect(html).toContain("ONLINE PRODUCT");
+    expect(html).toContain("CASH PRODUCT");
+    expect(html).not.toContain("UNPAID PRODUCT");
+    expect(html).not.toContain("ACCEPTED PRODUCT");
+    expect(html).not.toContain("Pago online");
+    expect(html).not.toContain("Contra reembolso");
+    expect(html).not.toContain("€");
+  });
 });
