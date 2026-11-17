@@ -21,6 +21,7 @@ import { partnerHeaders } from "./partnerApi";
 import { bytesToBase64, MENU_IMAGE_ACCEPT, prepareMenuImage, sha256File, validateMenuFile, MAX_MENU_IMAGE_BYTES } from "./menuAsset";
 import { usePwaUpdateBlocker } from "./pwaUpdateRuntime";
 import { connectCatalogRealtime } from "./catalogRealtime";
+import AllergenSelector from "./AllergenSelector";
 import { menuWriteBody, patchPartnerMenuAvailability, PartnerMenuRequestError, readMenuSnapshot } from "./partnerMenuContract";
 import type { MenuResponse, MenuSnapshot } from "./partnerMenuContract";
 import { usePartnerMenuRequests } from "./usePartnerMenuRequests";
@@ -844,9 +845,10 @@ export default function MenuEditor({
                   </span>
                 )}
               </label>
-              <label>
+              <label className="allergen-declaration-status">
                 Estado de la declaración de alérgenos
                 <select
+                  aria-label="Estado de la declaración de alérgenos"
                   value={draft.allergens === null ? "unknown" : "declared"}
                   onChange={(event) => updateDraft(setAllergenDeclaration(draft, event.target.value === "declared"))}
                 >
@@ -855,22 +857,11 @@ export default function MenuEditor({
                 </select>
                 <span className="field-hint">Una lista vacía es una declaración explícita; no equivale a desconocido ni certifica ausencia de alérgenos.</span>
               </label>
-              <label>
-                Alérgenos <span className="field-hint">separados por coma</span>
-                <input
-                  value={draft.allergens?.join(", ") ?? ""}
-                  disabled={draft.allergens === null}
-                  onChange={(event) =>
-                    updateDraft({
-                      allergens: event.target.value
-                        .split(",")
-                        .map((value) => value.trim())
-                        .filter(Boolean),
-                    })
-                  }
-                  placeholder={draft.allergens === null ? "Alérgenos desconocidos" : "Gluten, leche, frutos secos"}
-                />
-              </label>
+              <AllergenSelector
+                value={draft.allergens}
+                disabled={draft.allergens === null || saving}
+                onChange={(allergens) => updateDraft({ allergens })}
+              />
               <div className="checkbox-grid">
                 <label>
                   <input

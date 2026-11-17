@@ -1,3 +1,5 @@
+import { normalizeAllergenValues } from "./allergenCatalog";
+
 export type ModifierOption = {
   [key: string]: unknown;
   id: string;
@@ -84,7 +86,7 @@ export function normalizeModifier(raw: Partial<Modifier>, fallbackId: string): M
 export function normalizeItem(item: Item): Item {
   return {
     ...item,
-    allergens: Array.isArray(item.allergens) ? item.allergens : null,
+    allergens: Array.isArray(item.allergens) ? normalizeAllergenValues(item.allergens) : null,
     modifiers: Array.isArray(item.modifiers)
       ? item.modifiers.map((modifier, index) => normalizeModifier(modifier, `${item.id}-modifier-${index + 1}`))
       : [],

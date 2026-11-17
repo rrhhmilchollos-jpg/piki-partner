@@ -120,7 +120,7 @@ describe("Partner JSON upsert puro por ID exacto (sin API ni DB)", () => {
   it("preserva imagen, alérgenos, disponibilidad, grupos y unknowns cuando el update los omite", () => {
     const current = [product("keep", { modifiers: [group()], available: false, provenance: { checksum: "original" } })];
     const result = prepareMenuJsonImport(current, [{ id: "keep", name: "Nuevo nombre", price: 8 }]);
-    expect(result.items[0]).toEqual({ ...current[0], name: "Nuevo nombre", price: 8 });
+    expect(result.items[0]).toEqual({ ...current[0], allergens: ["gluten"], name: "Nuevo nombre", price: 8 });
   });
 
   it("un hueco de imagen no borra un asset; una URL explícita poblada se conserva exactamente", () => {

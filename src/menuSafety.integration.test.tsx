@@ -121,6 +121,23 @@ describe("Menu safety interaction regressions (offline)", () => {
     tree = renderEditor(); button(tree, "Guardar producto").props.onClick(); await tick();
     expect(requests.filter((request) => request.init?.method === "PUT").at(-1)!.body.expectedMenuRevision).toBe(6);
   });
+  it("selecciona pictogramas táctiles y guarda códigos estables de alérgenos", async () => {
+    let tree = await mount(); button(tree, "Editar").props.onClick(); tree = renderEditor();
+    const declaration = nodes(tree).find((node) => node.type === "select" && node.props["aria-label"] === "Estado de la declaración de alérgenos")!;
+    declaration.props.onChange({ target: { value: "declared" } }); tree = renderEditor();
+    const symbols = () => {
+      const component = nodes(tree).find((node) => node.type?.name === "AllergenSelector")!;
+      return nodes(component.type(component.props));
+    };
+    const gluten = symbols().find((node) => node.type === "button" && node.props["aria-label"] === "Añadir Cereales con gluten")!;
+    expect(gluten.props["aria-pressed"]).toBe(false);
+    gluten.props.onClick(); tree = renderEditor();
+    symbols().find((node) => node.type === "button" && node.props["aria-label"] === "Añadir Soja")!.props.onClick();
+    tree = renderEditor(); button(tree, "Guardar producto").props.onClick(); await tick();
+    const put = requests.find((request) => request.init?.method === "PUT")!;
+    expect(put.body.items[0].allergens).toEqual(["gluten", "soja"]);
+    expect(nodes(tree).some((node) => node.type === "input" && /alérgenos/i.test(String(node.props.placeholder || "")))).toBe(false);
+  });
   it("409 reloads without retry, keeps the local draft and blocks blind resave", async () => {
     let tree = await mount(); button(tree, "Editar").props.onClick(); tree = renderEditor();
     field(tree).props.onChange({ target: { value: "Borrador sin perder" } }); tree = renderEditor();
