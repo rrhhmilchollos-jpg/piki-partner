@@ -85,10 +85,10 @@ export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: Props) 
         const response = await fetch(`${apiOrigin}/api/v1/auth/employee/password-reset/request`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-PIKI-Surface": "partner" },
-          body: JSON.stringify({ email }),
+          body: JSON.stringify({ email: email.trim().toLowerCase() }),
         });
-        const data = await response.json().catch(() => ({})) as { message?: string };
-        if (!response.ok) throw new Error(data.message || "No se ha podido solicitar la recuperación.");
+        const data = await response.json().catch(() => ({})) as { message?: string; retryAfterSeconds?: number };
+        if (!response.ok) throw new Error(apiErrorMessage(data, response.status, "No se ha podido solicitar la recuperación."));
         setMessage(data.message || "Si el correo es válido, recibirás un enlace de recuperación.");
         return;
       }

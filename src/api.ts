@@ -3,6 +3,7 @@ type ApiErrorPayload = {
   message?: unknown;
   details?: unknown;
   fieldErrors?: unknown;
+  retryAfterSeconds?: unknown;
 };
 
 const errorMessages: Record<string, string> = {
@@ -36,7 +37,14 @@ export function apiErrorMessage(value: unknown, status: number, fallback: string
   const message = typeof payload.message === "string" ? payload.message.trim() : "";
 
   if (errorMessages[code]) return errorMessages[code];
-  if (status === 429) return "Demasiados intentos. Espera un minuto antes de volver a intentarlo.";
+  if (status === 429) {
+    const seconds = payload.retryAfterSeconds;
+    if (typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0) {
+      const minutes = Math.max(1, Math.ceil(seconds / 60));
+      return `Demasiados intentos. Espera ${minutes === 1 ? "un minuto" : `${minutes} minutos`} antes de volver a intentarlo.`;
+    }
+    return "Demasiados intentos. Espera un minuto antes de volver a intentarlo.";
+  }
   if (status >= 500) return "El servicio de PIKI no está disponible ahora. Inténtalo de nuevo en unos minutos.";
   return message || fallback;
 }
