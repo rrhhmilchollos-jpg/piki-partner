@@ -3,6 +3,8 @@ import { getStoredEmail, storeEmail } from "./authStorage";
 import { ArrowRight, Eye, EyeOff, KeyRound, LockKeyhole, ShieldCheck } from "lucide-react";
 import { apiErrorMessage, getApiErrorMessage, getNetworkErrorMessage } from "./api";
 import { readPasswordRecoveryLink } from "./passwordRecoveryLink";
+import PartnerConnectionCheck from "./PartnerConnectionCheck";
+import { getPartnerTransportErrorMessage } from "./partnerConnectionDiagnostics";
 
 type AuthMode = "login" | "change" | "request" | "reset";
 
@@ -125,7 +127,7 @@ export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: Props) 
       if (!response.ok) throw new Error(await getApiErrorMessage(response, "No se ha podido cambiar la contraseña."));
       onAuthenticated(token);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : getNetworkErrorMessage());
+      setError(getPartnerTransportErrorMessage(reason) || getNetworkErrorMessage());
     } finally {
       setBusy(false);
     }
@@ -163,6 +165,7 @@ export default function EmployeeAuthGate({ apiOrigin, onAuthenticated }: Props) 
         <button type="submit" className="login-submit" disabled={busy}>{busy ? "Procesando…" : mode === "login" ? <>Iniciar sesión <ArrowRight size={18} /></> : mode === "request" ? "Enviar enlace de recuperación" : mode === "reset" ? "Guardar contraseña" : "Guardar contraseña"}</button>
         {mode === "login" && <button type="button" className="link-button login-help" onClick={() => switchMode("request")}>He olvidado mi contraseña</button>}
         {(mode === "request" || mode === "reset") && <button type="button" className="link-button login-help" onClick={() => switchMode("login")}>Volver al inicio de sesión</button>}
+        <PartnerConnectionCheck apiOrigin={apiOrigin} disabled={busy} />
         <small><ShieldCheck size={14} />Acceso protegido para establecimientos PIKI.</small>
       </form>
     </div>

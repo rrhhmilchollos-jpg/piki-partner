@@ -64,3 +64,9 @@ Evidencia: `pnpm install --frozen-lockfile --prefer-offline` sin modificar lockf
 - [ ] Publicar los cambios de Partner en GitHub y comprobar el build web servido.
 - [ ] Construir y verificar APK de release con la clave Partner del respaldo, sin publicar a Play, sin nueva identidad/firma y sin inventar metadatos CI.
 - [ ] Confirmar firma compatible con la instalación actual en la V2s, actualización sin borrar datos, login, recepción/alarma e impresión física. No se da por probado con mocks.
+
+## Conexión de login Sunmi V2s · 18/11/2026
+- [ ] Usar HTTP nativo para solicitudes JSON Android a la API PIKI, preservando headers/HTTP/AbortSignal y sin duplicar POST fallidos; mantener SSE, multipart/archivos y web por sus transportes existentes.
+- [ ] Diagnóstico manual en login con GET `/ready`, sin usuario/contraseña/token ni intentos de login, mostrando versión, reloj, origen y respuesta/error de la PDA de forma redactada.
+- [ ] Mantener TLS validado, límites de login y permisos. Validar regresiones offline, publicar y firmar actualización de la 1.0.13 con el mismo paquete/clave, sin Play ni borrar datos.
+- [ ] Confirmar en la PDA el diagnóstico/login, recepción y ticket físico. La conectividad desde sandbox y mocks no prueba el resultado del terminal.
