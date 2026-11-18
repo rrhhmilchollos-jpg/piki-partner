@@ -1,0 +1,6 @@
+# Single existing app; no extra project is initialized.
+packages:
+  - '.'
+# core-js postinstall is informational; its runtime needs no build output.
+ignoredBuiltDependencies:
+  - core-js

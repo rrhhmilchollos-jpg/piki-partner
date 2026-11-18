@@ -70,3 +70,12 @@ Evidencia: `pnpm install --frozen-lockfile --prefer-offline` sin modificar lockf
 - [ ] Diagnóstico manual en login con GET `/ready`, sin usuario/contraseña/token ni intentos de login, mostrando versión, reloj, origen y respuesta/error de la PDA de forma redactada.
 - [ ] Mantener TLS validado, límites de login y permisos. Validar regresiones offline, publicar y firmar actualización de la 1.0.13 con el mismo paquete/clave, sin Play ni borrar datos.
 - [ ] Confirmar en la PDA el diagnóstico/login, recepción y ticket físico. La conectividad desde sandbox y mocks no prueba el resultado del terminal.
+
+## Compatibilidad de arranque SUNMI V2 · 18/11/2026
+- [x] Cargar antes de App la compatibilidad de Object.fromEntries, Array.flat/flatMap, Promise.finally, globalThis y trimStart/trimEnd; conservar todas las inicializaciones y datos existentes.
+- [x] Disponer de AbortController/AbortSignal en WebView62 sin parche global de fetch/XHR; conservar cancelación lógica, descarte de respuestas obsoletas y transporte JSON/SSE/archivos.
+- [x] No cambiar Chrome/WebView del sistema, TLS, autenticación, ACL, impresora, cuentas, comisiones, cartas, horarios ni quiosco. No prometer compatibilidad Chrome56 ni bajar mínimos de Capacitor.
+- [ ] Validar arranque/importaciones y funciones en un entorno sin esas APIs y regresiones actuales, TypeScript/build y firma/paquete de una actualización superior a Android13/1.0.14. Sin Google Play ni borrado de datos.
+- [ ] Confirmar físicamente arranque/login/recepción/impresión en cada V2. No modificar el inventario ni asignar una V2 de número de serie distinto sin autorización del comercio correcto. Mantener S/N e IMEI reales únicamente en el inventario privado, no en estas fuentes públicas.
+
+Evidencia de laboratorio: 512 tests Vitest (22 nuevos del arranque compatible) y 36 controles Node Android aprobados; TypeScript y build 1.0.15 aprobados. App compilado en Chromium con APIs retiradas: login y GET /ready, acceso con POST JSON nativo simulado y tablero pending→accepted→ready con una impresión simulada tras confirmación. También verificado con APIs modernas. No es ejecución en un WebView 62 físico ni prueba de impresora real; API/red externa bloqueadas, sin operaciones comerciales.
