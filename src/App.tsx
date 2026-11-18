@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Archive, BarChart3, Bell, BookOpen, ChevronDown, CircleHelp, Clock3, Inbox, LogOut, Menu, PackageSearch, Phone, Store, X } from "lucide-react";
 import "./App.css";
 import "./partnerSafety.css";
+import "./SunmiPda.css";
 import CookieConsent from "./components/CookieConsent";
 import EmployeeAuthGate from "./EmployeeAuthGate";
 import MenuEditor from "./MenuEditor";
@@ -20,6 +21,7 @@ import PartnerNativeNotificationControl from "./PartnerNativeNotificationControl
 import { PartnerKitchenReceptionProvider } from "./PartnerKitchenReception";
 import { isPartnerNativeAndroid, partnerNativeNotifications } from "./partnerNativeNotifications";
 import PartnerAccountIdentity from "./PartnerAccountIdentity";
+import { isPartnerPdaMode } from "./partnerPdaMode";
 
 /* oxlint-disable react/set-state-in-effect -- effects reconcile authenticated profile and active location. */
 
@@ -33,7 +35,7 @@ function storedPartnerView(): View {
 function rememberPartnerView(view: View): void {
   try { sessionStorage.setItem(partnerActiveViewKey, view); } catch { /* Navigation still works if storage is unavailable. */ }
 }
-const isPdaMode = location.hostname === "partners-pda.pikidelivery.com" || location.hostname.startsWith("partners-pda.");
+const isPdaMode = isPartnerPdaMode({ hostname: location.hostname, search: location.search, nativeAndroid: isPartnerNativeAndroid() });
 const navigation: Array<{ id: View; label: string; icon: typeof Bell }> = [
   { id: "orders", label: "Pedidos", icon: Bell },
   { id: "incoming", label: "Pedidos entrantes", icon: Inbox },
@@ -315,7 +317,7 @@ function PartnerOperationsApp() {
   const identityKey = `${sessionEpoch}:${accountIdentityKey(profile)}`;
   const isCurrentIdentity = () => isCurrentSession() && currentAccountIdentity.current === accountIdentityKey(profile);
   const identityHeader = <>
-    <PartnerAccountIdentity key={identityKey} profile={profile} token={token} identityKey={identityKey} isCurrentSession={isCurrentIdentity} onUnauthorized={clearSession} onPhotoSaved={(photoUrl) => {
+    <PartnerAccountIdentity key={identityKey} compact={isPdaMode} extraControls={isPdaMode && isPartnerNativeAndroid() ? <PartnerNativeNotificationControl /> : undefined} profile={profile} token={token} identityKey={identityKey} isCurrentSession={isCurrentIdentity} onUnauthorized={clearSession} onPhotoSaved={(photoUrl) => {
       if (!isCurrentIdentity()) return;
       photoRevision.current += 1;
       setProfile((current) => current && accountIdentityKey(current) === accountIdentityKey(profile) ? { ...current, photoUrl } : current);
@@ -359,12 +361,12 @@ function PartnerOperationsApp() {
     <main className="orders-main">
       <header className="orders-topbar">
         <button type="button" className="mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Abrir menú"><Menu size={22} /></button>
-        <div className="location-select"><Store size={18} /><div><span>LOCAL ACTIVO</span>{profile.locations.length > 1 ? <label><select value={location.id} onChange={(event) => setActiveLocationId(event.target.value)} aria-label="Seleccionar local">{profile.locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={16} /></label> : <strong>{location.name}</strong>}</div></div>
+        <div className="location-select">{isPdaMode ? <img className="pda-logo-mark" src="/piki-icon-192.png" alt="PIKI" /> : <Store size={18} />}<div><span>{isPdaMode ? "PIKI · LOCAL ACTIVO" : "LOCAL ACTIVO"}</span>{profile.locations.length > 1 ? <label><select value={location.id} onChange={(event) => setActiveLocationId(event.target.value)} aria-label="Seleccionar local">{profile.locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><ChevronDown size={16} /></label> : <strong>{location.name}</strong>}</div></div>
         <div className="topbar-right"><StoreStatusControl token={token} location={location} enabled={canStore} onUnauthorized={clearSession} />{identityHeader}</div>
       </header>
       <PartnerKitchenReceptionProvider key={`${profile.tenant || "assigned"}:${location.id}:${canOrdersRead}`} token={token} locationId={location.id} canRead={canOrdersRead} onUnauthorized={clearSession}>
-      <div className="orders-page">
-        {canOrdersRead && <PartnerNativeNotificationControl />}
+      <div className={`orders-page ${isPdaMode && (currentView === "orders" || currentView === "incoming") ? "pda-operation-page" : ""}`}>
+        {!isPdaMode && canOrdersRead && <PartnerNativeNotificationControl />}
         {location.readOnly && <div className="orders-loading" role="status">Local en consulta, no operativo. La aprobación comercial, disponibilidad y carta deben estar confirmadas antes de recibir pedidos.</div>}
         {!currentView && <div className="orders-loading">Este perfil no tiene permisos operativos para el local seleccionado. Contacta con el administrador de tu cuenta PIKI.</div>}
         {(currentView === "orders" || currentView === "incoming") && <OrdersBoard key={currentView} token={token} locationId={location.id} canRead={canOrdersRead} ordersEnabled={location.ordersEnabled !== false && location.readOnly !== true} readinessReason={location.reason} canAccept={canAccept} canPrepare={canPrepare} canCancel={canCancel} pdaMode={isPdaMode} incomingOnly={currentView === "incoming"} onUnauthorized={clearSession} />}
@@ -380,10 +382,10 @@ function PartnerOperationsApp() {
 }
 
 function App() {
-  return <>
-    <CookieConsent />
+  return <div className={`partner-application ${isPdaMode && !location.hash.startsWith("#onboarding") ? "pda-application" : ""}`}>
+    <CookieConsent inline={isPdaMode && !location.hash.startsWith("#onboarding")} />
     {location.hash.startsWith("#onboarding") ? <PartnerOnboarding /> : <PartnerOperationsApp />}
-  </>;
+  </div>;
 }
 
 export default App;

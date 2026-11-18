@@ -11,6 +11,7 @@ import { incomingPartnerOrders } from "./partnerIncomingOrders";
 import SunmiPdaBoard from "./SunmiPdaBoard";
 import { printOrderToSunmi } from "./sunmiPrinter";
 import { canTransitionPartnerOrder, partnerOrderCountdown, partnerOrderDeadline } from "./partnerOrderPolicy";
+import { initialPdaOrderGroup, ordersInPdaGroup, pdaOrderTabs, selectedPdaOrder, type PartnerPdaOrderGroup } from "./partnerPdaOrders";
 
 /* oxlint-disable react/set-state-in-effect -- effects synchronise external partner order data. */
 
@@ -134,6 +135,8 @@ export default function OrdersBoard({
   const [supportForm, setSupportForm] = useState({ orderId: "", priority: "normal", subject: "", description: "" });
   const [printingOrder, setPrintingOrder] = useState<PartnerOrder | null>(null);
   const [preparationMinutesByOrder, setPreparationMinutesByOrder] = useState<Record<string, number>>({});
+  const [pdaGroup, setPdaGroup] = useState<PartnerPdaOrderGroup | null>(null);
+  const [selectedPdaOrderId, setSelectedPdaOrderId] = useState("");
   const transitionLockRef = useRef<string | null>(null);
   const { orders, loading, receptionMessage, realtimeState, now, load, applyConfirmedOrder, activeCount, audioReady, prepareAudio, resolveOrder, notifyCancelledOrder } = usePartnerKitchenReception();
   const ordersForView = useMemo(() => incomingOnly ? incomingPartnerOrders(orders) : orders, [incomingOnly, orders]);
@@ -185,6 +188,10 @@ export default function OrdersBoard({
         throw new Error("El servidor no ha confirmado este cambio. Revisa el estado actualizado antes de volver a actuar; no se ha impreso ninguna comanda.");
       }
       applyConfirmedOrder(confirmed);
+      if (pdaMode && !incomingOnly && ["accepted", "preparing", "ready_for_pickup"].includes(status)) {
+        setPdaGroup(status === "ready_for_pickup" ? "ready" : "preparing");
+        setSelectedPdaOrderId(confirmed._id);
+      }
       if (status === "accepted") {
         resolveOrder(order._id);
         await printOrder(confirmed);
@@ -228,25 +235,35 @@ export default function OrdersBoard({
   const counts = useMemo(() => ({ all: ordersForView.length, pending: ordersForView.filter((order) => order.status === "pending").length, accepted: ordersForView.filter((order) => order.status === "accepted").length, preparing: ordersForView.filter((order) => order.status === "preparing").length, ready_for_pickup: ordersForView.filter((order) => order.status === "ready_for_pickup").length, picked_up: ordersForView.filter((order) => order.status === "picked_up").length, on_the_way: ordersForView.filter((order) => order.status === "on_the_way").length }), [ordersForView]);
   const isRealtimeConnected = realtimeState.status === "connected";
   const connectionLabel = realtimeStatusLabel(realtimeState, now);
-  const pdaOrder = ordersForView.find((order) => order.status === "pending") || ordersForView.find((order) => ["accepted", "preparing"].includes(order.status)) || ordersForView.find((order) => order.status === "ready_for_pickup") || null;
-  if (pdaMode) return <SunmiPdaBoard
+  const currentPdaGroup = incomingOnly ? "pending" : pdaGroup ?? initialPdaOrderGroup(ordersForView);
+  const pdaQueue = ordersInPdaGroup(ordersForView, currentPdaGroup);
+  const pdaOrder = selectedPdaOrder(pdaQueue, selectedPdaOrderId);
+  if (pdaMode && canRead) return <><SunmiPdaBoard
     order={pdaOrder}
     loading={loading}
     message={message}
     busy={Boolean(busyOrderId)}
     canAccept={canRead && canAccept}
     canPrepare={canRead && canPrepare}
+    canCancel={canRead && canCancel}
+    onCancel={() => { if (pdaOrder) cancelOrder(pdaOrder); }}
     activeCount={incomingOnly ? incomingCount : activeCount}
     audioReady={audioReady}
     realtimeState={realtimeState}
     connectionLabel={connectionLabel}
     preparationMinutes={pdaOrder ? selectedPreparationMinutes(pdaOrder) : 20}
+    orderGroups={pdaOrderTabs(ordersForView, incomingOnly)}
+    activeGroup={currentPdaGroup}
+    onGroupChange={(group) => { setPdaGroup(group); setSelectedPdaOrderId(""); }}
+    queue={pdaQueue}
+    onSelectOrder={setSelectedPdaOrderId}
+    onRefresh={() => { void load(); }}
     onPreparationMinutesChange={(minutes) => { if (pdaOrder) setPreparationMinutesByOrder((previous) => ({ ...previous, [pdaOrder._id]: minutes })); }}
     onAccept={() => { if (pdaOrder) void move(pdaOrder, "accepted", selectedPreparationMinutes(pdaOrder)); }}
     onReady={() => { if (pdaOrder) void move(pdaOrder, "ready_for_pickup", selectedPreparationMinutes(pdaOrder)); }}
     onPrint={() => { if (pdaOrder) void printOrder(pdaOrder); }}
     onEnableAudio={() => { void prepareAudio(); }}
-  />;
+  />{printingOrder && <PrintablePartnerTicket order={printingOrder} />}</>;
   if (!canRead) return <section className="orders-workspace orders-access-workspace" aria-label={incomingOnly ? "Pedidos entrantes" : "Pedidos PIKI Partner Orders"}>
     <header className="orders-heading"><div><p className="section-kicker">OPERACIÓN DE PARTNER</p><h1>{incomingOnly ? "Pedidos entrantes" : "Pedidos"}</h1><p>El espacio de pedidos queda visible para tu equipo, aunque el local todavía no esté operativo.</p></div><div className="connection-status is-offline"><WifiOff size={16} /><span>Recepción pausada</span></div></header>
     <div className="orders-access-panel" role="status"><div className="orders-access-icon"><CircleAlert size={22} /></div><div><strong>{ordersEnabled ? "Falta autorización para leer pedidos" : "El local aún no puede recibir pedidos"}</strong><p>{ordersEnabled ? "Tu cuenta tiene acceso al espacio, pero el API no ha confirmado el permiso operativo orders:read." : readinessReason === "not_approved" ? "La ficha comercial está pendiente de aprobación. Cuando PIKI la active, aquí aparecerán los pedidos nuevos automáticamente." : "Activa el local y completa la puesta en marcha de carta y disponibilidad para empezar a recibir comandas."}</p>{!ordersEnabled && readinessReason && <p className="orders-access-reason">Código de bloqueo del API: <code>{readinessReason}</code></p>}</div></div>

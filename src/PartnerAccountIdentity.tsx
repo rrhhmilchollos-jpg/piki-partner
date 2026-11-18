@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { UserRound } from "lucide-react";
 import { accountPhotoUrl, ACCOUNT_PHOTO_ACCEPT, acknowledgedAccountPhoto, prepareAccountPhoto } from "./accountPhoto";
 import { apiOrigin, displayRole, type PartnerProfile } from "./partnerApi";
@@ -13,6 +13,8 @@ type Props = {
   isCurrentSession: () => boolean;
   onUnauthorized: () => void;
   onPhotoSaved: (photoUrl: string | null) => void;
+  compact?: boolean;
+  extraControls?: ReactNode;
 };
 
 export function AccountPhoto({ photoUrl, fullName }: { photoUrl: string | null; fullName: string }) {
@@ -24,7 +26,7 @@ export function AccountPhoto({ photoUrl, fullName }: { photoUrl: string | null; 
   </div>;
 }
 
-export default function PartnerAccountIdentity({ profile, token, identityKey, isCurrentSession, onUnauthorized, onPhotoSaved }: Props) {
+export default function PartnerAccountIdentity({ profile, token, identityKey, isCurrentSession, onUnauthorized, onPhotoSaved, compact = false, extraControls }: Props) {
   const input = useRef<HTMLInputElement>(null);
   const identity = useMemo(() => ({ token, identityKey }), [token, identityKey]);
   const locked = useRef<typeof identity | null>(null);
@@ -72,10 +74,7 @@ export default function PartnerAccountIdentity({ profile, token, identityKey, is
   const fullName = profile.fullName || "Nombre no disponible";
   const hasPhoto = Boolean(accountPhotoUrl(profile.photoUrl));
   const action = hasPhoto ? "Cambiar foto propia" : "Añadir foto propia";
-  return <section className="account-identity" aria-label={`Mi cuenta: ${fullName}`}>
-    <AccountPhoto key={identityKey} photoUrl={profile.photoUrl} fullName={fullName} />
-    <div className="account-identity-copy">
-      <strong className="account-identity-name">{fullName}</strong>
+  const controls = <>
       <span>Puesto: {profile.jobRole ? displayRole(profile.jobRole) : "No informado"}</span>
       <span>Rol activo: {profile.role ? displayRole(profile.role) : "No informado"}</span>
       <div className="account-photo-actions">
@@ -88,6 +87,13 @@ export default function PartnerAccountIdentity({ profile, token, identityKey, is
         if (file) void savePhoto(file);
       }} />
       {message && <p className="account-photo-message" role="status">{message}</p>}
+      {extraControls}
+  </>;
+  return <section className={`account-identity${compact ? " is-compact" : ""}`} aria-label={`Mi cuenta: ${fullName}`}>
+    <AccountPhoto key={identityKey} photoUrl={profile.photoUrl} fullName={fullName} />
+    <div className="account-identity-copy">
+      <strong className="account-identity-name">{fullName}</strong>
+      {compact ? <details className="pda-identity-details"><summary>Mi cuenta</summary>{controls}</details> : controls}
     </div>
   </section>;
 }

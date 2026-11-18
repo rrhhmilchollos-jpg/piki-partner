@@ -1,0 +1,277 @@
+/* Import after App.css and PartnerAccountIdentity.css. Desktop is unchanged. */
+.pda-application {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: #171717;
+  background: #f5f5f2;
+}
+
+.pda-application > [role="dialog"] {
+  flex: none;
+  max-width: 100%;
+}
+
+.pda-mode.orders-app-shell {
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  min-height: min-content;
+  background: #f5f5f2;
+}
+
+.pda-mode .orders-main {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: min-content;
+  margin-left: 0;
+}
+
+/* The drawer is opt-in at every width, including desktop ?pda=1. */
+.pda-mode .orders-sidebar {
+  display: none;
+  width: min(290px, 88vw);
+  min-height: 0;
+  height: 100vh;
+  height: 100dvh;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 12px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  transform: none;
+  color: #f5f5f5;
+  background: #171717;
+}
+
+.pda-mode .orders-sidebar.is-visible { display: flex; }
+.pda-mode .orders-sidebar nav button.active { color: #171717; background: #ffd72e; }
+.pda-mode .partner-establishment-card { border-color: #3a3a3a; background: #252525; }
+.pda-mode .partner-establishment-icon { color: #171717; background: #ffd72e; }
+.pda-mode .orders-brand strong { color: #ffd72e; }
+.pda-mode .orders-brand { padding-bottom: 18px; }
+.pda-mode .sidebar-scrim { display: block; position: fixed; inset: 0; z-index: 25; background: #0008; }
+.pda-mode .mobile-menu,
+.pda-mode .mobile-close { display: grid; flex: none; place-items: center; width: 44px; min-height: 44px; padding: 0; }
+.pda-mode .mobile-close { margin-left: auto; }
+
+/* No sticky header or estimated 72px viewport subtraction. */
+.pda-mode .orders-topbar {
+  position: relative;
+  top: auto;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px 8px;
+  min-height: 0;
+  padding: calc(6px + env(safe-area-inset-top, 0px)) 10px 6px;
+  border-bottom: 1px solid #deded8;
+  background: #fff;
+  backdrop-filter: none;
+}
+
+.pda-mode .location-select { flex: 1 1 0; min-width: 0; gap: 7px; }
+.pda-mode .location-select > div { min-width: 0; width: 100%; }
+.pda-mode .location-select > svg { flex: none; color: #171717; }
+.pda-mode .location-select > div > span { display: block; margin-bottom: 1px; font-size: 8px; }
+.pda-mode .location-select strong { max-width: none; white-space: normal; overflow-wrap: anywhere; font-size: 13px; }
+.pda-mode .location-select select { width: 100%; max-width: 100%; min-height: 44px; font-size: 13px; }
+.pda-mode .topbar-right {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  gap: 5px 8px;
+}
+
+.pda-mode .orders-topbar .store-control { flex: 0 0 auto; }
+.pda-mode .store-control > button { min-height: 44px; padding: 5px 8px; gap: 6px; border-radius: 8px; }
+.pda-mode .store-control small { display: none; }
+.pda-mode .store-control b { font-size: 10px; }
+.pda-mode .store-toggle { width: 32px; height: 20px; background: #d8d8d2; }
+.pda-mode .is-open .store-toggle { background: #ffd72e; }
+.pda-mode .is-open .store-toggle span { transform: translateX(12px); background: #171717; }
+.pda-mode .store-control > p { z-index: 1; width: min(240px, 80vw); }
+
+/* Canonical name and own photo always remain visible, never ellipsized. */
+.pda-mode .account-identity { flex: 1 1 140px; align-items: center; min-width: 0; max-width: none; gap: 6px; }
+.pda-mode .account-photo { flex: 0 0 36px; width: 36px; height: 36px; background: #f0f0eb; color: #545454; }
+.pda-mode .account-identity-copy { display: grid; flex: 1 1 0; min-width: 0; gap: 2px; }
+.pda-mode .account-identity-name { display: block; max-width: none; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; color: #171717; font-size: 13px; line-height: 1.3; }
+.pda-mode .account-logout { width: 44px; min-height: 44px; color: #171717; }
+.pda-mode .pda-identity-details { min-width: 0; color: #505050; font-size: 11px; }
+.pda-mode .pda-identity-details > summary { min-height: 32px; padding: 7px 0; cursor: pointer; color: #171717; font-weight: 750; }
+.pda-mode .pda-identity-details[open] { max-height: 40vh; overflow-y: auto; }
+.pda-mode .account-photo-actions { flex-wrap: wrap; }
+.pda-mode .account-photo-actions button { min-height: 44px; color: #171717; }
+.pda-mode .account-photo-message { color: #545454; }
+
+.pda-mode .pda-account-panel { flex: none; min-width: 0; margin: 0; border-bottom: 1px solid #deded8; background: #fff; }
+.pda-mode .pda-account-panel > summary { min-height: 44px; padding: 12px; color: #171717; font-size: 12px; font-weight: 800; cursor: pointer; }
+.pda-mode .pda-account-panel[open] { max-height: 40vh; overflow-y: auto; }
+.pda-mode .pda-account-panel .orders-message { display: block; margin: 0 10px 10px; padding: 10px; font-size: 12px; }
+.pda-mode .pda-account-panel .orders-message p { margin: 7px 0; }
+.pda-mode .pda-account-panel .secondary-button { min-height: 44px; margin: 3px 3px 3px 0; white-space: normal; }
+
+/* Other views retain their normal vertical page scrolling. */
+.pda-mode .orders-page {
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 16px 12px 28px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #f5f5f2;
+}
+
+.pda-mode .orders-page.pda-operation-page {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.pda-mode .pda-operation-page > .orders-loading { flex: none; margin: 0; padding: 8px 10px; font-size: 12px; }
+
+/* Extra specificity replaces every old App.css Sunmi grid/min-height rule. */
+.sunmi-pda-shell,
+.pda-mode .sunmi-pda-shell {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  grid-template-rows: none;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 0;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+  color: #171717;
+  background: #f5f5f2;
+}
+
+.sunmi-pda-shell .sunmi-pda-header { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 8px; padding: 0; }
+.sunmi-pda-shell .sunmi-pda-header h1 { margin: 0; color: #171717; font-size: 22px; line-height: 1.2; letter-spacing: -.5px; }
+.sunmi-header-controls { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sunmi-pda-shell .sunmi-connection { display: flex; align-items: center; gap: 5px; max-width: 112px; padding: 6px 7px; border: 1px solid #ddd; border-radius: 8px; color: #595959; background: #fff; font-size: 10px; font-weight: 750; line-height: 1.2; text-align: left; overflow-wrap: anywhere; }
+.sunmi-pda-shell .sunmi-connection.is-connected { color: #171717; border-color: #ddd; background: #fff; }
+.sunmi-connection-dot { flex: 0 0 7px; width: 7px; height: 7px; border-radius: 50%; background: #b77715; }
+.sunmi-pda-shell .is-connected .sunmi-connection-dot { background: #26814e; }
+.sunmi-refresh { display: grid; flex: none; place-items: center; width: 44px; min-height: 44px; padding: 0; border: 1px solid #d7d7d1; border-radius: 8px; color: #171717; background: #fff; }
+
+.sunmi-order-groups { display: grid; flex: none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.sunmi-order-groups button { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px; min-width: 0; min-height: 46px; padding: 5px 3px; border: 1px solid #d6d6d0; border-radius: 8px; color: #505050; background: #fff; font-size: 12px; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
+.sunmi-order-groups button.is-selected { color: #171717; border-color: #ffd72e; background: #ffd72e; }
+.sunmi-order-groups button b { display: grid; place-items: center; min-width: 22px; min-height: 22px; padding: 2px 4px; border-radius: 6px; color: #171717; background: #f0f0eb; font-size: 11px; }
+.sunmi-order-groups button.is-selected b { color: #ffd72e; background: #171717; }
+.sunmi-order-groups button:disabled { opacity: 1; cursor: default; }
+
+.sunmi-queue-selector { display: grid; flex: none; min-width: 0; gap: 3px; color: #555; font-size: 10px; font-weight: 750; }
+.sunmi-queue-selector select { display: block; width: 100%; min-width: 0; max-width: 100%; min-height: 44px; padding: 8px; border: 1px solid #d6d6d0; border-radius: 8px; color: #171717; background: #fff; font-size: 13px; font-weight: 750; }
+
+/* Only the body scrolls in the normal operational viewport. Its explicit
+   intrinsic height allows very tall account/consent panels to overflow the
+   outer application naturally instead of clipping essential controls. */
+.sunmi-order-scroll { flex: 1 1 0; height: 0; min-width: 0; min-height: 48px; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; -webkit-overflow-scrolling: touch; }
+.sunmi-order-scroll > * + * { margin-top: 10px; }
+.sunmi-selected-order { padding: 2px 2px 0; }
+.sunmi-selected-order h2 { margin: 0; color: #171717; font-size: 24px; font-weight: 900; line-height: 1.15; letter-spacing: -.6px; overflow-wrap: anywhere; }
+.sunmi-selected-order p { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 10px; margin: 5px 0 0; color: #555; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.sunmi-selected-order p strong { color: #171717; font-size: 14px; }
+
+.sunmi-pda-shell .sunmi-alarm { gap: 8px; width: 100%; padding: 9px 10px; border: 1px solid #d5b62d; border-radius: 8px; color: #171717; background: #fff4bd; box-shadow: none; animation: none; }
+.sunmi-pda-shell .sunmi-alarm.needs-gesture { border-color: #b99713; animation: none; }
+.sunmi-pda-shell .sunmi-alarm svg { flex: none; color: #171717; }
+.sunmi-pda-shell .sunmi-alarm span { min-width: 0; }
+.sunmi-pda-shell .sunmi-alarm strong { font-size: 14px; }
+.sunmi-pda-shell .sunmi-alarm small { font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
+.sunmi-pda-shell .sunmi-alert-stack { min-height: 0; }
+.sunmi-pda-shell .sunmi-special-alert { align-items: flex-start; gap: 8px; padding: 10px; border: 2px solid #bc3a25; border-radius: 8px; color: #7e2519; background: #fff0ec; }
+.sunmi-pda-shell .sunmi-special-alert span { min-width: 0; }
+.sunmi-pda-shell .sunmi-special-alert strong { font-size: 12px; letter-spacing: .02em; }
+.sunmi-pda-shell .sunmi-special-alert small { font-size: 14px; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sunmi-pda-shell .sunmi-order-detail { min-height: 0; overflow: visible; padding: 11px; border: 1px solid #deded8; border-radius: 9px; background: #fff; box-shadow: none; }
+.sunmi-pda-shell .sunmi-order-meta { padding-bottom: 9px; border-color: #e7e7e1; }
+.sunmi-pda-shell .sunmi-order-meta > span { color: #171717; font-size: 11px; letter-spacing: .04em; }
+.sunmi-pda-shell .sunmi-items { gap: 0; margin-top: 4px; }
+.sunmi-pda-shell .sunmi-item { display: flex; align-items: flex-start; gap: 9px; padding: 10px 0; border-color: #e9e9e4; }
+.sunmi-pda-shell .sunmi-item > b { flex: 0 0 auto; min-width: 30px; color: #171717; font-size: 21px; line-height: 1.2; }
+.sunmi-pda-shell .sunmi-item > div { flex: 1 1 0; min-width: 0; gap: 4px; }
+.sunmi-pda-shell .sunmi-item strong { color: #171717; font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; }
+.sunmi-pda-shell .sunmi-item span { color: #545454; font-size: 14px; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sunmi-pda-shell .sunmi-rider-status { align-items: flex-start; gap: 8px; margin-top: 8px; padding: 9px; border-radius: 7px; color: #171717; background: #f3f3ee; }
+.sunmi-pda-shell .sunmi-rider-status > svg { flex: none; }
+.sunmi-pda-shell .sunmi-rider-status small { font-size: 9px; }
+.sunmi-pda-shell .sunmi-rider-status strong { font-size: 13px; line-height: 1.3; overflow-wrap: anywhere; }
+
+.sunmi-pda-shell .sunmi-action-zone,
+.sunmi-pda-shell .sunmi-action-zone.is-incoming { display: grid; flex: none; gap: 6px; margin: 0; padding: 8px 0 0; border-top: 1px solid #d8d8d2; background: #f5f5f2; }
+.sunmi-pda-shell .sunmi-action-hint { margin: 0; color: #505050; font-size: 11px; line-height: 1.2; }
+.sunmi-pda-shell .sunmi-prep-options { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+.sunmi-pda-shell .sunmi-prep-options button { min-width: 0; min-height: 44px; padding: 5px 2px; border: 1px solid #d0d0c9; border-radius: 7px; color: #171717; background: #fff; box-shadow: none; font-size: 14px; font-weight: 850; }
+.sunmi-pda-shell .sunmi-prep-options button.is-selected { border-color: #171717; color: #ffd72e; background: #171717; box-shadow: none; }
+.sunmi-pda-shell .sunmi-primary-action { width: 100%; min-height: 60px; padding: 10px 8px; border: 0; border-radius: 9px; color: #171717; background: #ffd72e; box-shadow: none; font-size: 20px; font-weight: 950; line-height: 1.2; letter-spacing: 0; }
+.sunmi-pda-shell .sunmi-ready { min-height: 56px; color: #ffd72e; background: #171717; box-shadow: none; font-size: 18px; }
+.sunmi-pda-shell .sunmi-primary-action:disabled { opacity: .55; cursor: not-allowed; }
+.sunmi-pda-shell .sunmi-print-action { min-height: 46px; padding: 7px; border: 1px solid #d0d0c9; border-radius: 8px; color: #171717; background: #fff; font-size: 12px; line-height: 1.25; }
+.sunmi-pda-shell .sunmi-print-action:disabled { opacity: .45; cursor: not-allowed; }
+.sunmi-pda-shell .sunmi-complete-state { gap: 3px; padding: 9px; border-radius: 8px; color: #171717; background: #fff4bd; }
+.sunmi-pda-shell .sunmi-complete-state strong { font-size: 16px; }
+.sunmi-pda-shell .sunmi-complete-state span { font-size: 11px; line-height: 1.35; }
+.sunmi-pda-shell .sunmi-empty { gap: 8px; min-height: 0; padding: 24px 12px; color: #666; }
+.sunmi-pda-shell .sunmi-empty strong { color: #171717; font-size: 18px; }
+.sunmi-pda-shell .sunmi-empty span { max-width: 360px; font-size: 12px; line-height: 1.45; }
+.sunmi-pda-shell .sunmi-message { margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; color: #624700; background: #fff4bd; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+
+.sunmi-pda-shell button:focus-visible,
+.sunmi-pda-shell select:focus-visible,
+.sunmi-order-scroll:focus-visible,
+.pda-mode summary:focus-visible { outline: 3px solid #171717; outline-offset: 2px; }
+
+/* Short / landscape displays use outer vertical scrolling rather than hide
+   the account, privacy or operational actions behind a fixed-height frame. */
+@media (max-height: 540px) {
+  .pda-application { height: auto; min-height: 100vh; min-height: 100dvh; overflow-y: visible; }
+  .pda-mode.orders-app-shell { flex: 1 0 auto; }
+  .pda-mode .orders-main { flex: 1 0 auto; }
+  .pda-mode .orders-page.pda-operation-page { flex: 1 0 auto; overflow: visible; }
+  .pda-mode .sunmi-pda-shell { flex: 1 0 auto; }
+  .sunmi-order-scroll { flex: none; height: 35vh; min-height: 100px; }
+  .sunmi-pda-shell .sunmi-primary-action { min-height: 56px; }
+}
+
+@media (min-height: 541px) and (max-height: 700px) {
+  .pda-mode .sunmi-pda-shell { gap: 4px; padding-top: 6px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+  .sunmi-order-groups button { min-height: 44px; }
+  .sunmi-pda-shell .sunmi-action-zone,
+  .sunmi-pda-shell .sunmi-action-zone.is-incoming { gap: 4px; padding-top: 4px; }
+  .sunmi-pda-shell .sunmi-primary-action { min-height: 56px; }
+}
+
+.pda-application .auth-page { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.pda-mode .orders-access-workspace { min-width: 0; min-height: 0; padding: 16px 12px; overflow-y: auto; }
+.pda-mode .pda-identity-details > span { display: block; margin: 4px 0; }
+.sunmi-order-groups[data-group-count="1"] { grid-template-columns: minmax(0, 1fr); }
+.sunmi-order-tools { color: #555; font-size: 12px; }
+.sunmi-order-tools > summary { min-height: 44px; padding: 12px 4px; cursor: pointer; }
+.sunmi-cancel-action { min-height: 44px; margin: 4px 0; padding: 8px 12px; border: 1px solid #b43a2d; border-radius: 8px; color: #932e24; background: #fff; }
+@media print {
+  .pda-application, .pda-mode.orders-app-shell, .pda-mode .orders-main, .pda-mode .orders-page.pda-operation-page { height: auto; min-height: 0; overflow: visible; }
+}
+
+.pda-mode .pda-logo-mark { width: 26px; height: 26px; flex: none; border-radius: 7px; }
+.pda-mode .pda-identity-details .orders-message { display: block; margin: 8px 0; padding: 8px; font-size: 11px; }
+.pda-mode .pda-identity-details .orders-message p { margin: 6px 0; }
+.pda-mode .pda-identity-details .secondary-button { min-height: 44px; width: 100%; margin: 3px 0; white-space: normal; }

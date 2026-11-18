@@ -52,3 +52,15 @@ Evidencia: `pnpm install --frozen-lockfile --prefer-offline` sin modificar lockf
 ## Pedidos entrantes visibles · 16/11/2026
 - [x] Mostrar «Pedidos» y «Pedidos entrantes» a perfiles que tienen `orders:read` declarado aunque el local esté pausado, pendiente de aprobación o aún no sea orderable.
 - [x] Mantener bloqueadas la lectura REST y las acciones de aceptar/preparar hasta que el backend confirme que el local está operativo; explicar el motivo en la pantalla en lugar de ocultar el módulo.
+
+## Adaptación Sunmi V2s · 18/11/2026
+- [x] Detectar PDA en Android Capacitor (localhost), host PDA y `?pda=1`, sin redirecciones ni cambio de sesión.
+- [x] Pestañas Nuevos/Preparación/Listos y selección de comandas confirmadas; no renderizar las columnas web en PDA.
+- [x] Cabecera PIKI compacta con nombre canónico/foto visibles y cuenta/avisos desplegables; cuerpo desplazable y acciones táctiles accesibles, sin quitar notas/modificadores.
+- [x] Mantener separados permisos de lectura, aceptación, preparación y cancelación. Mantener bloqueo si `canRead` no está autorizado y conservar ticket térmico de respaldo al entrar en PDA.
+- [x] Consentimiento de cookies en flujo PDA, sin aceptar por el usuario ni superponerlo a las acciones; scroll exterior si falta altura.
+- [x] TypeScript y 384 tests frontend offline; navegador App real con API/Android/impresión simulados en 360/375×640, comanda larga, consentimiento, landscape y PC1440×900. Aceptar15min→accepted→ready_for_pickup confirmado en mocks, una impresión simulada tras ACK, sin tráfico de producción.
+- [x] Usuario confirma que Partner nunca se ha subido a Google Play: máximo Play 0. Preparar release web1.0.13 y Android12/1.0.13 conservando `com.pikidelivery.partners` y guard de firma existente.
+- [ ] Publicar los cambios de Partner en GitHub y comprobar el build web servido.
+- [ ] Construir y verificar APK de release con la clave Partner del respaldo, sin publicar a Play, sin nueva identidad/firma y sin inventar metadatos CI.
+- [ ] Confirmar firma compatible con la instalación actual en la V2s, actualización sin borrar datos, login, recepción/alarma e impresión física. No se da por probado con mocks.
