@@ -22,6 +22,7 @@ import { PartnerKitchenReceptionProvider } from "./PartnerKitchenReception";
 import { isPartnerNativeAndroid, partnerNativeNotifications } from "./partnerNativeNotifications";
 import PartnerAccountIdentity from "./PartnerAccountIdentity";
 import { isPartnerPdaMode } from "./partnerPdaMode";
+import { readPasswordRecoveryLink } from "./passwordRecoveryLink";
 
 /* oxlint-disable react/set-state-in-effect -- effects reconcile authenticated profile and active location. */
 
@@ -174,6 +175,10 @@ function SessionRecovery({ message, onRetry, onLogout }: { message: string; onRe
 }
 
 function PartnerOperationsApp() {
+  const [recoveryLink, setRecoveryLink] = useState(() => readPasswordRecoveryLink(window.location?.href || "https://partner.piki.invalid"));
+  // Keep this gate open through reset success/cancellation until an explicit login.
+  // Opening a recovery link must not clear/revoke an existing or temporary session.
+  const [recoveryActive, setRecoveryActive] = useState(Boolean(recoveryLink.token));
   const [token, setToken] = useState(storedToken);
   const [sessionEpoch, setSessionEpoch] = useState(0);
   const currentSession = useRef({ token, epoch: 0 });
@@ -188,6 +193,9 @@ function PartnerOperationsApp() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => { rememberPartnerView(activeView); }, [activeView]);
+  useEffect(() => {
+    if (recoveryLink.cleanPath) window.history.replaceState({}, "", recoveryLink.cleanPath);
+  }, [recoveryLink.cleanPath]);
 
   const isCurrentSession = useCallback(() => currentSession.current.token === token && currentSession.current.epoch === sessionEpoch, [token, sessionEpoch]);
   const clearSession = useCallback(() => {
@@ -259,6 +267,7 @@ function PartnerOperationsApp() {
   };
 
   useEffect(() => {
+    if (recoveryActive) return;
     if (!token) { setCheckingSession(false); return; }
     let cancelled = false;
     let validationSequence = 0;
@@ -305,15 +314,19 @@ function PartnerOperationsApp() {
     document.addEventListener("visibilitychange", wake);
     const timer = window.setInterval(wake, 60_000);
     return () => { cancelled = true; validationRequest?.abort(); window.clearInterval(timer); document.removeEventListener("visibilitychange", wake); };
-  }, [clearSession, isCurrentSession, token, sessionRetry]);
+  }, [clearSession, isCurrentSession, token, sessionRetry, recoveryActive]);
 
-  if (checkingSession) return <main className="auth-page"><p>Comprobando acceso seguro a PIKI Partner Orders…</p></main>;
-  if (token && !profile && sessionIssue) return <SessionRecovery message={sessionIssue} onRetry={retrySession} onLogout={logout} />;
-  if (!token || !profile) return <main className="auth-page"><EmployeeAuthGate apiOrigin={apiOrigin} onAuthenticated={(nextToken) => {
+  const authGate = <main className="auth-page"><EmployeeAuthGate apiOrigin={apiOrigin} initialRecoveryToken={recoveryActive ? recoveryLink.token : undefined} onRecoveryFinished={() => setRecoveryLink({ token: "", cleanPath: null })} onAuthenticated={(nextToken) => {
+    setRecoveryActive(false);
+    setRecoveryLink({ token: "", cleanPath: null });
     replaceSession(nextToken);
     saveToken(nextToken);
     window.dispatchEvent(new Event("piki-authenticated"));
   }} /></main>;
+  if (recoveryActive) return authGate;
+  if (checkingSession) return <main className="auth-page"><p>Comprobando acceso seguro a PIKI Partner Orders…</p></main>;
+  if (token && !profile && sessionIssue) return <SessionRecovery message={sessionIssue} onRetry={retrySession} onLogout={logout} />;
+  if (!token || !profile) return authGate;
   const identityKey = `${sessionEpoch}:${accountIdentityKey(profile)}`;
   const isCurrentIdentity = () => isCurrentSession() && currentAccountIdentity.current === accountIdentityKey(profile);
   const identityHeader = <>
