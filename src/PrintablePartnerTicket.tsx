@@ -1,3 +1,5 @@
+import { partnerTicketCustomerDetails } from "./partnerTicketCustomer";
+
 type PrintableItem = {
   name?: string;
   quantity?: number;
@@ -22,7 +24,8 @@ export type PrintablePartnerOrder = {
   pickupPin?: string | null;
   estimatedReadyAt?: string | null;
   restaurant?: { name?: string; address?: string; phone?: string } | null;
-  customer?: { name?: string } | null;
+  customer?: { name?: string; phone?: string } | null;
+  printCustomerContactEnabled?: boolean;
 };
 
 function isCashOrder(order: PrintablePartnerOrder) {
@@ -31,6 +34,7 @@ function isCashOrder(order: PrintablePartnerOrder) {
 
 export default function PrintablePartnerTicket({ order }: { order: PrintablePartnerOrder }) {
   const itemCount = (order.items || []).reduce((total, item) => total + (item.quantity || 1), 0);
+  const customerDetails = partnerTicketCustomerDetails(order);
   return <div className="piki-thermal-ticket" aria-hidden="true">
     <header>
       <strong>PIKI #{order.publicCode || order._id}</strong>
@@ -43,7 +47,12 @@ export default function PrintablePartnerTicket({ order }: { order: PrintablePart
     {order.pickupQrUrl && <><p className="thermal-pickup-label">RIDER PICKUP CODE</p><img className="thermal-qr" src={order.pickupQrUrl} alt="Código QR de recogida" /></>}
     {order.pickupPin && <p className="thermal-pickup-label">PIN: {order.pickupPin}</p>}
     {(order.pickupQrUrl || order.pickupPin) && <div className="thermal-rule" />}
-    <p className="thermal-line"><span>Cliente</span><b>{order.customer?.name || "Cliente PIKI"}</b></p>
+    {customerDetails ? <section className="thermal-customer-details">
+      <strong>CLIENTE</strong>
+      <p><span>Nombre y apellido</span><b>{customerDetails.name}</b></p>
+      <p><span>Dirección completa</span><b>{customerDetails.address}</b></p>
+      <p><span>Teléfono de contacto</span><b>{customerDetails.phone}</b></p>
+    </section> : <p className="thermal-line"><span>Cliente</span><b>{order.customer?.name || "Cliente PIKI"}</b></p>}
     <p className="thermal-line"><span>Pago</span><b>{isCashOrder(order) ? "CONTRARREEMBOLSO" : order.paymentState === "authorized" ? "PREPAGO · ONLINE · AUTORIZADO" : order.paymentState === "paid" ? "PREPAGO" : "PAGO ONLINE"}</b></p>
     {order.estimatedReadyAt && <p className="thermal-line"><span>Listo estimado</span><b>{new Date(order.estimatedReadyAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</b></p>}
     <p className="thermal-line"><span>Artículos</span><b>{itemCount}</b></p>

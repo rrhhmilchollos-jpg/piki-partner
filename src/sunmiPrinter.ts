@@ -1,5 +1,6 @@
 import type { PartnerOrder } from "./OrdersBoard";
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import { partnerTicketCustomerDetails } from "./partnerTicketCustomer";
 
 type SunmiPrintBridge = {
   printEscPos?: (payload: { text: string; orderId: string; qrCode?: string; afterQrText?: string }) => Promise<void> | void;
@@ -35,6 +36,7 @@ function paymentLabel(order: PartnerOrder) {
 }
 
 function ticketParts(order: PartnerOrder) {
+  const customerDetails = partnerTicketCustomerDetails(order);
   const beforeQr = [
     "PIKI PARTNER ORDERS",
     `PEDIDO ${order.publicCode || order._id}`,
@@ -47,7 +49,12 @@ function ticketParts(order: PartnerOrder) {
   const afterQr = [
     ...(order.pickupPin ? [`PIN: ${order.pickupPin}`] : []),
     ...(order.pickupQrUrl || order.pickupPin ? ["------------------------------"] : []),
-    `CLIENTE: ${order.customer?.name || "Cliente PIKI"}`,
+    ...(customerDetails ? [
+      "CLIENTE",
+      `NOMBRE Y APELLIDO: ${customerDetails.name}`,
+      `DIRECCIÓN COMPLETA: ${customerDetails.address}`,
+      `TELÉFONO DE CONTACTO: ${customerDetails.phone}`,
+    ] : [`CLIENTE: ${order.customer?.name || "Cliente PIKI"}`]),
     paymentLabel(order),
     ...(order.estimatedReadyAt ? [`LISTO ESTIMADO: ${formatTicketDate(order.estimatedReadyAt)}`] : []),
     `${(order.items || []).reduce((sum, item) => sum + (item.quantity || 1), 0)} ARTÍCULOS`,

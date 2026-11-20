@@ -124,6 +124,11 @@ html, body, #root { max-width: 100%; overflow-x: hidden; }
   .piki-thermal-ticket .thermal-line { display: flex !important; align-items: flex-start !important; justify-content: space-between !important; gap: 7px !important; margin: 4px 0 !important; }
   .piki-thermal-ticket .thermal-line span { flex: 0 0 12mm !important; }
   .piki-thermal-ticket .thermal-line b { flex: 1 !important; overflow-wrap: anywhere !important; text-align: right !important; }
+  .piki-thermal-ticket .thermal-customer-details { display: grid !important; gap: 4px !important; margin: 5px 0 !important; }
+  .piki-thermal-ticket .thermal-customer-details > strong { font-size: 10px !important; }
+  .piki-thermal-ticket .thermal-customer-details p { display: grid !important; gap: 1px !important; margin: 0 !important; }
+  .piki-thermal-ticket .thermal-customer-details p span { font-size: 8px !important; font-weight: 700 !important; text-transform: uppercase !important; }
+  .piki-thermal-ticket .thermal-customer-details p b { font-size: 10px !important; font-weight: 700 !important; overflow-wrap: anywhere !important; white-space: pre-wrap !important; }
   .piki-thermal-ticket ul { display: grid !important; gap: 5px !important; margin: 0 !important; padding: 0 !important; list-style: none !important; }
   .piki-thermal-ticket li { display: flex !important; justify-content: space-between !important; gap: 6px !important; }
   .piki-thermal-ticket li > span { display: grid !important; min-width: 0 !important; }

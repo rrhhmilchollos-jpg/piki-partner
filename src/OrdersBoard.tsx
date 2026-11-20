@@ -19,7 +19,8 @@ export type PartnerOrder = PartnerKitchenOrder & {
   publicCode?: string;
   createdAt: string;
   restaurantName?: string;
-  customer?: { name?: string; allergies?: string } | null;
+  customer?: { name?: string; phone?: string; allergies?: string } | null;
+  printCustomerContactEnabled?: boolean;
   deliveryAddress?: string;
   deliveryNote?: string;
   items?: { name?: string; quantity?: number; unitPriceCents?: number; selectedOptions?: { optionName?: string }[] }[];

@@ -41,6 +41,19 @@ describe("Partner note and action views", () => {
     expect(html).toContain("ONLINE · AUTORIZADO");
     expect(html).not.toContain("PAGADO ONLINE");
   });
+  it("prints customer name, full address and contact phone only when enabled for the target restaurants", () => {
+    const html = renderToStaticMarkup(<PrintablePartnerTicket order={{ ...order, status: "accepted", printCustomerContactEnabled: true, customer: { name: "Lucía García López", phone: "+34 600 000 000" }, deliveryAddress: "Carrer de Prova, 12, 2.º A, 46800 Xàtiva, València" }} />);
+    expect(html).toContain("Nombre y apellido");
+    expect(html).toContain("Lucía García López");
+    expect(html).toContain("Dirección completa");
+    expect(html).toContain("Carrer de Prova, 12, 2.º A, 46800 Xàtiva, València");
+    expect(html).toContain("Teléfono de contacto");
+    expect(html).toContain("+34 600 000 000");
+  });
+  it("prints the explicit fallback for each missing customer contact field", () => {
+    const html = renderToStaticMarkup(<PrintablePartnerTicket order={{ ...order, status: "accepted", printCustomerContactEnabled: true, customer: null, deliveryAddress: " " }} />);
+    expect(html.match(/No facilitado\/a/g)).toHaveLength(3);
+  });
   it("omits an empty note without inventing instructions", () => {
     const html = renderToStaticMarkup(<PrintablePartnerTicket order={{ ...order, deliveryNote: "   " }} />);
     expect(html).not.toContain("NOTA DEL PEDIDO");
