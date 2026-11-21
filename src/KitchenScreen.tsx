@@ -4,6 +4,7 @@ import { PartnerOrderAlarmBanner, type PartnerKitchenOrder, usePartnerOrderAlarm
 import { connectPikiRealtime } from "./realtime";
 import PrintablePartnerTicket from "./PrintablePartnerTicket";
 import { visibleOrderReference } from "./orderReference";
+import { isConfirmedPartnerStatusAck } from "./partnerStatusAck";
 
 type Order = PartnerKitchenOrder & {
 	publicCode?: string;
@@ -103,13 +104,18 @@ export default function KitchenScreen({ apiOrigin, token, onUnauthorized }: { ap
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      const body = await response.json().catch(() => ({})) as { error?: string; message?: string };
-      if (response.ok && status === "accepted") resolveOrder(id);
-      setMessage(response.ok
-        ? status === "accepted"
-          ? "Pedido aceptado. La alarma se ha detenido; PIKI sigue coordinando el Rider mientras lo preparas."
-          : "Pedido actualizado correctamente"
-        : body.message || body.error || `No se pudo actualizar el pedido (HTTP ${response.status}).`);
+      const body = await response.json().catch(() => ({})) as { error?: string; message?: string; order?: unknown };
+      const confirmed = response.ok && isConfirmedPartnerStatusAck(body, id, status);
+      if (confirmed && status === "accepted") resolveOrder(id);
+      setMessage(!response.ok
+        ? body.message || body.error || `No se pudo actualizar el pedido (HTTP ${response.status}).`
+        : !confirmed
+          ? "El servidor no ha confirmado el cambio de estado. Revisa el pedido actualizado antes de volver a actuar."
+          : status === "accepted"
+            ? "Pedido aceptado. La alarma se ha detenido; PIKI sigue coordinando el Rider mientras lo preparas."
+            : status === "ready_for_pickup"
+              ? "Pedido listo. PIKI ha puesto la asignación del Rider en cola."
+              : "Pedido actualizado correctamente");
       await load();
     } catch {
       setMessage("Error de red actualizando el pedido. Revisa la conexión antes de repetir.");
